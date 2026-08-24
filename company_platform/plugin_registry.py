@@ -26,6 +26,7 @@ class PluginDependency:
 @dataclass(frozen=True)
 class PluginTool:
     name: str
+    effect: str
     permissions: tuple[str, ...]
 
 
@@ -38,6 +39,7 @@ class PluginManifest:
     display_name: str
     description: str
     permissions: tuple[str, ...]
+    write_permissions: tuple[str, ...]
     tools: tuple[PluginTool, ...]
     dependencies: tuple[PluginDependency, ...]
     capabilities: tuple[str, ...]
@@ -215,6 +217,14 @@ def _parse_manifest(value: Any, source_path: Path) -> PluginManifest:
             )
         )
     permissions = _string_tuple(value.get("permissions"), f"插件 {plugin_id} 权限")
+    write_permissions = _string_tuple(
+        value.get("write_permissions"), f"插件 {plugin_id} 写权限"
+    )
+    excess_write_permissions = sorted(set(write_permissions) - set(permissions))
+    if excess_write_permissions:
+        raise RegistryError(
+            f"插件 {plugin_id} 写权限未在 permissions 声明：{', '.join(excess_write_permissions)}"
+        )
     raw_tools = value.get("tools")
     if not isinstance(raw_tools, list):
         raise RegistryError(f"插件 {plugin_id} tools 必须是数组")
@@ -223,6 +233,8 @@ def _parse_manifest(value: Any, source_path: Path) -> PluginManifest:
     for item in raw_tools:
         if not isinstance(item, dict):
             raise RegistryError(f"插件 {plugin_id} 工具声明无效")
+        if set(item) != {"name", "effect", "permissions"}:
+            raise RegistryError(f"插件 {plugin_id} 工具声明字段无效")
         name = _nonempty_string(item.get("name"), f"插件 {plugin_id} 工具名", 160)
         if not SAFE_PLUGIN_ID.fullmatch(name) or name in seen_tools:
             raise RegistryError(f"插件 {plugin_id} 工具名无效或重复：{name}")
@@ -235,12 +247,27 @@ def _parse_manifest(value: Any, source_path: Path) -> PluginManifest:
         excess = sorted(set(tool_permissions) - set(permissions))
         if excess:
             raise RegistryError(f"插件 {plugin_id}/{name} 工具越权：{', '.join(excess)}")
-        tools.append(PluginTool(name=name, permissions=tool_permissions))
+        effect = item.get("effect")
+        if effect not in {"read", "write"}:
+            raise RegistryError(f"插件 {plugin_id}/{name} 工具 effect 必须是 read 或 write")
+        structured_permissions = set(tool_permissions) & set(write_permissions)
+        if effect == "read" and structured_permissions:
+            raise RegistryError(
+                f"插件 {plugin_id}/{name} 只读工具不得持有写权限："
+                f"{', '.join(sorted(structured_permissions))}"
+            )
+        if effect == "write" and not structured_permissions:
+            raise RegistryError(f"插件 {plugin_id}/{name} 写工具必须持有至少一个 write_permissions 权限")
+        tools.append(PluginTool(name=name, effect=effect, permissions=tool_permissions))
     configuration = value.get("configuration", {})
     navigation = value.get("navigation", {})
     data_scope = value.get("data_scope", {})
     if not all(isinstance(item, dict) for item in (configuration, navigation, data_scope)):
         raise RegistryError(f"插件 {plugin_id} 的扩展配置必须是对象")
+    skills = _string_tuple(value.get("skills"), f"插件 {plugin_id} 技能")
+    invalid_skills = [skill for skill in skills if not SAFE_PLUGIN_ID.fullmatch(skill)]
+    if invalid_skills:
+        raise RegistryError(f"插件 {plugin_id} 技能名无效：{', '.join(invalid_skills)}")
     return PluginManifest(
         api_version=value["api_version"],
         id=plugin_id,
@@ -249,10 +276,11 @@ def _parse_manifest(value: Any, source_path: Path) -> PluginManifest:
         display_name=_nonempty_string(value.get("display_name"), f"插件 {plugin_id} 显示名称", 100),
         description=_nonempty_string(value.get("description"), f"插件 {plugin_id} 描述", 500),
         permissions=permissions,
+        write_permissions=write_permissions,
         tools=tuple(tools),
         dependencies=tuple(dependencies),
         capabilities=_string_tuple(value.get("capabilities"), f"插件 {plugin_id} 能力"),
-        skills=_string_tuple(value.get("skills"), f"插件 {plugin_id} 技能"),
+        skills=skills,
         workflows=_string_tuple(value.get("workflows"), f"插件 {plugin_id} 工作流"),
         configuration=dict(configuration),
         navigation=dict(navigation),
@@ -334,7 +362,7 @@ def _parse_workflow(value: Any, manifest: PluginManifest, source_path: Path) -> 
         nodes=tuple(nodes),
         source_path=source_path,
     )
-    validate_workflow(workflow)
+    validate_workflow(workflow, manifest)
     return workflow
 
 
@@ -363,15 +391,25 @@ def plan_workflow(workflow: Workflow) -> list[list[WorkflowNode]]:
     return stages
 
 
-def validate_workflow(workflow: Workflow) -> None:
+def validate_workflow(workflow: Workflow, manifest: PluginManifest) -> None:
     nodes = workflow.node_map
+    write_permissions = set(manifest.write_permissions)
+
+    def is_write_tool(node: WorkflowNode) -> bool:
+        declared = manifest.tool_map.get(node.tool or "")
+        return node.type == "tool" and declared is not None and declared.effect == "write"
+
     for node in workflow.nodes:
-        if node.type != "tool" and any(
-            permission.endswith(".write") for permission in node.permissions
-        ):
+        if node.type != "tool" and set(node.permissions) & write_permissions:
             raise RegistryError(
                 f"工作流 {workflow.id}/{node.id} 的结构化写权限只能声明在 Tool 节点"
             )
+        if node.type == "tool":
+            declared = manifest.tool_map.get(node.tool or "")
+            if declared is None or set(declared.permissions) != set(node.permissions):
+                raise RegistryError(
+                    f"工作流 {workflow.id}/{node.id} 工具未知或节点权限与清单不一致"
+                )
         if any(dependency not in nodes or dependency == node.id for dependency in node.depends_on):
             raise RegistryError(f"工作流 {workflow.id}/{node.id} 依赖无效")
         if node.type == "join" and len(node.depends_on) < 2:
@@ -388,10 +426,7 @@ def validate_workflow(workflow: Workflow) -> None:
     if sorted(workflow.output_nodes) != actual_outputs:
         raise RegistryError(f"工作流 {workflow.id} output_nodes 与 DAG 不一致")
     for node in workflow.nodes:
-        structured_write = node.type == "tool" and any(
-            permission.endswith(".write") for permission in node.permissions
-        )
-        if not structured_write:
+        if not is_write_tool(node):
             continue
         if len(node.depends_on) != 1 or nodes[node.depends_on[0]].type != "approval":
             raise RegistryError(
@@ -405,9 +440,7 @@ def validate_workflow(workflow: Workflow) -> None:
         protected_writes = [
             candidate
             for candidate in workflow.nodes
-            if candidate.type == "tool"
-            and approval.id in candidate.depends_on
-            and any(permission.endswith(".write") for permission in candidate.permissions)
+            if is_write_tool(candidate) and approval.id in candidate.depends_on
         ]
         if len(protected_writes) != 1:
             raise RegistryError(f"工作流 {workflow.id}/{approval.id} 必须只保护一个直接写入节点")

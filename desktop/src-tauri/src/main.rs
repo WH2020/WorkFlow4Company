@@ -22,9 +22,22 @@ const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 fn selected_profile() -> Result<String, String> {
     let profile = env::var("AGENT4COMPANY_PROFILE").unwrap_or_else(|_| "company-manager".into());
-    match profile.as_str() {
-        "company-manager" | "company-with-sales" => Ok(profile),
-        _ => Err(format!("未知工作台组合：{profile}")),
+    let valid = !profile.is_empty()
+        && profile.len() <= 80
+        && profile
+            .chars()
+            .next()
+            .is_some_and(|value| value.is_ascii_lowercase())
+        && profile.split(['.', '_', '-']).all(|segment| {
+            !segment.is_empty()
+                && segment
+                    .chars()
+                    .all(|value| value.is_ascii_lowercase() || value.is_ascii_digit())
+        });
+    if valid {
+        Ok(profile)
+    } else {
+        Err(format!("工作台组合 ID 无效：{profile}"))
     }
 }
 
@@ -56,26 +69,18 @@ fn usable_windows_path(path: PathBuf) -> PathBuf {
 }
 
 fn project_root() -> Result<PathBuf, String> {
-    let mut starts = Vec::new();
-    if let Ok(current) = env::current_dir() {
-        starts.push(usable_windows_path(current));
-    }
-    if let Ok(executable) = env::current_exe() {
-        if let Some(parent) = executable.parent() {
-            starts.push(usable_windows_path(parent.to_path_buf()));
+    let executable = env::current_exe()
+        .map(usable_windows_path)
+        .map_err(|error| format!("无法定位 Agent4Company 可执行文件：{error}"))?;
+    let mut cursor = executable.parent();
+    for _ in 0..9 {
+        let Some(path) = cursor else { break };
+        if is_project_root(path) {
+            return Ok(path.to_path_buf());
         }
+        cursor = path.parent();
     }
-    for start in starts {
-        let mut cursor = Some(start.as_path());
-        for _ in 0..9 {
-            let Some(path) = cursor else { break };
-            if is_project_root(path) {
-                return Ok(path.to_path_buf());
-            }
-            cursor = path.parent();
-        }
-    }
-    Err("Agent4Company 必须从完整的公司管理平台目录启动。".into())
+    Err("Agent4Company 可执行文件必须位于完整公司管理平台目录内。".into())
 }
 
 fn runtime_log(root: &Path, name: &str, truncate: bool) -> Result<File, String> {

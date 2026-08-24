@@ -6,9 +6,10 @@
   "display_name": "公司知识库",
   "description": "统一登记来源、检索证据并在审批后沉淀知识。",
   "permissions": ["knowledge.read", "knowledge.write"],
+  "write_permissions": ["knowledge.write"],
   "tools": [
-    {"name": "knowledge.search", "permissions": ["knowledge.read"]},
-    {"name": "knowledge.write", "permissions": ["knowledge.write"]}
+    {"name": "knowledge.search", "effect": "read", "permissions": ["knowledge.read"]},
+    {"name": "knowledge.write", "effect": "write", "permissions": ["knowledge.write"]}
   ],
   "dependencies": [],
   "capabilities": ["knowledge.search", "knowledge.source-register", "knowledge.governed-write"],

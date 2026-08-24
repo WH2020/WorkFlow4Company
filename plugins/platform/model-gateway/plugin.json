@@ -6,8 +6,9 @@
   "display_name": "模型接入",
   "description": "以提供方适配器统一模型选择、凭据边界和调用审计。",
   "permissions": ["model.invoke", "model.config.read"],
+  "write_permissions": [],
   "tools": [
-    {"name": "model.invoke", "permissions": ["model.invoke"]}
+    {"name": "model.invoke", "effect": "read", "permissions": ["model.invoke"]}
   ],
   "dependencies": [],
   "capabilities": ["model.provider-registry", "model.invoke", "model.audit"],

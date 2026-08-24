@@ -6,9 +6,10 @@
   "display_name": "文件处理",
   "description": "在项目空间内受控读取、提取、生成和验证文件。",
   "permissions": ["file.read", "artifact.write"],
+  "write_permissions": ["artifact.write"],
   "tools": [
-    {"name": "file.extract", "permissions": ["file.read"]},
-    {"name": "artifact.write", "permissions": ["artifact.write"]}
+    {"name": "file.extract", "effect": "read", "permissions": ["file.read"]},
+    {"name": "artifact.write", "effect": "write", "permissions": ["artifact.write"]}
   ],
   "dependencies": [{"id": "platform.project-space", "version": ">=1.0.0"}],
   "capabilities": ["file.extract", "artifact.document", "artifact.validation"],

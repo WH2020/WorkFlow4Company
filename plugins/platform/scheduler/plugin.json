@@ -6,10 +6,11 @@
   "display_name": "定时任务",
   "description": "以统一 DAG 任务为执行对象触发计划，不创建第二套任务事实源。",
   "permissions": ["schedule.read", "schedule.write", "task.create"],
+  "write_permissions": ["schedule.write", "task.create"],
   "tools": [
-    {"name": "schedule.read", "permissions": ["schedule.read"]},
-    {"name": "schedule.write", "permissions": ["schedule.write"]},
-    {"name": "task.create", "permissions": ["task.create"]}
+    {"name": "schedule.read", "effect": "read", "permissions": ["schedule.read"]},
+    {"name": "schedule.write", "effect": "write", "permissions": ["schedule.write"]},
+    {"name": "task.create", "effect": "write", "permissions": ["task.create"]}
   ],
   "dependencies": [],
   "capabilities": ["schedule.trigger", "schedule.history"],

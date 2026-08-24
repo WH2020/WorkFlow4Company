@@ -223,11 +223,24 @@ class CompanyRequestHandler(BaseHTTPRequestHandler):
         registry = context.registry
         profile = context.profile
         catalog = self._profile_catalog()
-        domain_notice = (
-            "销售管理域已在当前验证组合中启用，可用空数据流程验证审批和审计。"
-            if "domain.sales" in profile.enabled_domains
-            else "销售管理域已安装但未在默认组合中启用；公司核心可独立运行。"
-        )
+        enabled_names = [registry.plugins[domain_id].display_name for domain_id in profile.enabled_domains]
+        installed_names = [
+            registry.plugins[domain_id].display_name
+            for domain_id in profile.available_domains
+            if domain_id in registry.plugins
+        ]
+        if enabled_names:
+            domain_notice = (
+                f"当前组合已启用业务域：{'、'.join(enabled_names)}；"
+                "可用空数据流程验证审批和审计。"
+            )
+        elif installed_names:
+            domain_notice = (
+                f"已安装候选业务域：{'、'.join(installed_names)}；"
+                "默认组合未启用业务流程，公司核心可独立运行。"
+            )
+        else:
+            domain_notice = "当前未安装业务域；公司核心与共享能力仍可独立运行。"
         return {
             "product": {
                 "id": "agent4company",

@@ -10,6 +10,7 @@ from .plugin_registry import PluginRegistry, RegistryError
 
 
 SAFE_PROFILE_ID = re.compile(r"^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$")
+SAFE_SKILL_ID = re.compile(r"^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$")
 PROFILE_KEYS = {
     "id",
     "display_name",
@@ -133,3 +134,65 @@ def load_profile(
         roles=_string_tuple(value["roles"], f"Profile {profile_id} 角色"),
         source_path=source_path,
     )
+
+
+def resolve_profile_skill_directories(
+    project_root: Path | str,
+    registry: PluginRegistry,
+    profile: CompanyProfile,
+) -> tuple[Path, ...]:
+    """Resolve the platform skill plus enabled-domain contributions without discovery."""
+    root = Path(project_root).resolve(strict=True)
+    skills_root = (root / "pi/skills").resolve(strict=True)
+    skill_owners: dict[str, str] = {"manage-company": "platform-core"}
+    ordered_names = ["manage-company"]
+    for domain_id in profile.enabled_domains:
+        plugin = registry.plugins[domain_id]
+        for skill in plugin.skills:
+            if not SAFE_SKILL_ID.fullmatch(skill):
+                raise ProfileError(f"业务域 {domain_id} 的 Skill 名无效：{skill}")
+            owner = skill_owners.get(skill)
+            if owner is not None:
+                raise ProfileError(f"Skill {skill} 同时由 {owner} 与 {domain_id} 声明")
+            skill_owners[skill] = domain_id
+            ordered_names.append(skill)
+
+    directories: list[Path] = []
+    for skill in ordered_names:
+        candidate = skills_root / skill
+        if candidate.is_symlink():
+            raise ProfileError(f"Skill 目录不能是符号链接：{skill}")
+        try:
+            directory = candidate.resolve(strict=True)
+        except OSError as error:
+            raise ProfileError(f"Skill 目录不存在：{skill}") from error
+        skill_file = directory / "SKILL.md"
+        if (
+            not directory.is_relative_to(skills_root)
+            or not directory.is_dir()
+            or skill_file.is_symlink()
+            or not skill_file.is_file()
+            or skill_file.stat().st_size > 1024 * 1024
+        ):
+            raise ProfileError(f"Skill 路径越界或不是受限目录：{skill}")
+        try:
+            lines = skill_file.read_text(encoding="utf-8").splitlines()
+        except (OSError, UnicodeDecodeError) as error:
+            raise ProfileError(f"Skill 文件无法读取：{skill}") from error
+        if not lines or lines[0].strip() != "---":
+            raise ProfileError(f"Skill 缺少 YAML frontmatter：{skill}")
+        closing = next(
+            (index for index, line in enumerate(lines[1:], start=1) if line.strip() == "---"),
+            None,
+        )
+        if closing is None:
+            raise ProfileError(f"Skill frontmatter 未闭合：{skill}")
+        names = [
+            line.removeprefix("name:").strip()
+            for line in lines[1:closing]
+            if line.startswith("name:")
+        ]
+        if names != [skill]:
+            raise ProfileError(f"Skill 清单名与 frontmatter 不一致：{skill}")
+        directories.append(directory)
+    return tuple(directories)

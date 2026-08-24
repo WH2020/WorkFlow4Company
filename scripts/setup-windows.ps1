@@ -17,9 +17,12 @@ if (-not (Test-Path -LiteralPath $VenvPython -PathType Leaf)) {
 }
 
 $Node = Get-Command node -ErrorAction SilentlyContinue
-if (-not $Node) { throw "需要 Node.js 24.19.x；请安装后重试。" }
-$NodeMajor = [int]((& $Node.Source -p "process.versions.node.split('.')[0]").Trim())
-if ($NodeMajor -ne 24) { throw "当前 Node.js 主版本为 $NodeMajor，需要 24.x。" }
+if (-not $Node) { throw "需要 Node.js 24.19.0 或更高的 24.x 版本；请安装后重试。" }
+$NodeVersionText = ((& $Node.Source -p "process.versions.node").Trim())
+$NodeVersion = [version]$NodeVersionText
+if ($NodeVersion -lt [version]"24.19.0" -or $NodeVersion -ge [version]"25.0.0") {
+    throw "当前 Node.js 版本为 $NodeVersionText，需要 >=24.19.0 且 <25.0.0。"
+}
 
 $Pnpm = Get-Command pnpm -ErrorAction SilentlyContinue
 if (-not $Pnpm) { throw "需要 pnpm；请先启用 Corepack 或安装 pnpm。" }
@@ -34,7 +37,7 @@ if ($LASTEXITCODE -ne 0) { throw "安装 Node.js 依赖失败。" }
 & $VenvPython -m company_platform validate
 if ($LASTEXITCODE -ne 0) { throw "插件与工作流校验失败。" }
 & $VenvPython -m company_platform self-test
-if ($LASTEXITCODE -ne 0) { throw "销售域受控流程自检失败。" }
+if ($LASTEXITCODE -ne 0) { throw "默认业务域受控流程自检失败。" }
 & $Pnpm.Source test:runtime
 if ($LASTEXITCODE -ne 0) { throw "Pi 扩展、Skill 或 TypeScript 运行时验证失败。" }
 

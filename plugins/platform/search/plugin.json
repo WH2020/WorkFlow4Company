@@ -6,8 +6,9 @@
   "display_name": "聚合搜索",
   "description": "聚合本地知识与显式配置的公开搜索提供方，保留来源和访问时间。",
   "permissions": ["knowledge.read", "web.read"],
+  "write_permissions": [],
   "tools": [
-    {"name": "search.aggregate", "permissions": ["knowledge.read", "web.read"]}
+    {"name": "search.aggregate", "effect": "read", "permissions": ["knowledge.read", "web.read"]}
   ],
   "dependencies": [{"id": "platform.knowledge", "version": ">=1.0.0"}],
   "capabilities": ["search.aggregate", "search.source-open", "search.provenance"],

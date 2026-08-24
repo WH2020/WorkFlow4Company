@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import test from "node:test";
 import { DefaultPackageManager, SettingsManager } from "@earendil-works/pi-coding-agent";
 import {
@@ -31,7 +31,8 @@ type RpcRecord = {
 };
 
 async function inspectPiResources(
-  profileId: "company-manager" | "company-with-sales",
+  projectRoot: string,
+  profileId: string,
   skillDirectories: string[],
   agentDir: string,
 ): Promise<{ commands: Array<{ name: string; source: string }>; activeTools: string[] }> {
@@ -62,7 +63,7 @@ async function inspectPiResources(
       ...skillDirectories.flatMap((directory) => ["--skill", directory]),
     ],
     {
-      cwd: root,
+      cwd: projectRoot,
       env: {
         ...process.env,
         AGENT4COMPANY_PROFILE: profileId,
@@ -149,6 +150,27 @@ async function inspectPiResources(
   };
 }
 
+function resolveProfileSkillsWithPython(projectRoot: string, profileId: string): string[] {
+  const python = process.platform === "win32"
+    ? join(root, ".venv", "Scripts", "python.exe")
+    : join(root, ".venv", "bin", "python");
+  const program = [
+    "import json, sys",
+    "from company_platform.plugin_registry import load_registry",
+    "from company_platform.profiles import load_profile, resolve_profile_skill_directories",
+    "root, profile_id = sys.argv[1], sys.argv[2]",
+    "registry = load_registry(root)",
+    "profile = load_profile(root, registry, profile_id)",
+    "print(json.dumps([str(path) for path in resolve_profile_skill_directories(root, registry, profile)]))",
+  ].join("; ");
+  const result = spawnSync(python, ["-c", program, projectRoot, profileId], {
+    cwd: root,
+    encoding: "utf8",
+  });
+  assert.equal(result.status, 0, result.stderr);
+  return JSON.parse(result.stdout) as string[];
+}
+
 test("公司级插件目录可加载，销售仅是业务域", () => {
   const bundle = loadPluginBundle(root);
   const platform = [...bundle.plugins.values()].filter((plugin) => plugin.kind === "platform-capability");
@@ -230,7 +252,8 @@ test("新业务域可仅通过清单声明自己的工具", () => {
     display_name: "交付管理",
     description: "独立测试业务域。",
     permissions: ["delivery.read"],
-    tools: [{ name: "delivery.read", permissions: ["delivery.read"] }],
+    write_permissions: [],
+    tools: [{ name: "delivery.read", effect: "read", permissions: ["delivery.read"] }],
     dependencies: [],
     capabilities: ["delivery.review"],
     skills: [],
@@ -256,6 +279,69 @@ test("新业务域可仅通过清单声明自己的工具", () => {
   assert.doesNotThrow(() => validateRuntimeWorkflow(workflow, manifest));
 });
 
+test("工具显式 write effect 对 create/delete/mutate 同样强制审批", () => {
+  for (const permission of ["delivery.create", "delivery.delete", "delivery.mutate"]) {
+    const manifest = assertPluginManifest({
+      api_version: "company.platform/v1",
+      id: "domain.delivery",
+      version: "1.0.0",
+      kind: "business-domain",
+      display_name: "交付管理",
+      description: "写入效果负向验证。",
+      permissions: [permission],
+      write_permissions: [permission],
+      tools: [{ name: permission, effect: "write", permissions: [permission] }],
+      dependencies: [],
+      capabilities: ["delivery.change"],
+      skills: [],
+      workflows: [],
+    });
+    const workflow: RuntimeWorkflow = {
+      id: "domain.delivery.change",
+      plugin: manifest.id,
+      display_name: "交付变更",
+      description: "缺少审批的写入。",
+      entry_nodes: ["change"],
+      output_nodes: ["change"],
+      nodes: [{
+        id: "change",
+        type: "tool",
+        tool: permission,
+        depends_on: [],
+        permissions: [permission],
+      }],
+    };
+    assert.throws(
+      () => validateRuntimeWorkflow(workflow, manifest),
+      /结构化写入必须只有一个直接审批前驱/u,
+    );
+  }
+});
+
+test("写工具的只读组合权限仍可由 Agent 单独声明", () => {
+  const bundle = loadPluginBundle(root);
+  const current = bundle.plugins.get("platform.presentation")!;
+  const manifest = structuredClone(current) as PluginManifest;
+  manifest.skills = ["read-presentation-context"];
+  const workflow: RuntimeWorkflow = {
+    id: "platform.presentation.read-context",
+    plugin: manifest.id,
+    display_name: "读取演示上下文",
+    description: "只使用写工具组合权限中的只读部分。",
+    entry_nodes: ["read_context"],
+    output_nodes: ["read_context"],
+    nodes: [{
+      id: "read_context",
+      type: "agent",
+      depends_on: [],
+      permissions: ["knowledge.read"],
+      skill: "read-presentation-context",
+    }],
+  };
+  assert.deepEqual(manifest.write_permissions, ["presentation.plan.write", "artifact.write"]);
+  assert.doesNotThrow(() => validateRuntimeWorkflow(workflow, manifest));
+});
+
 test("Pi 清单与隔离 RPC 按 Profile 加载资源且只启用受控工具", { timeout: 45_000 }, async () => {
   const agentDir = mkdtempSync(join(tmpdir(), "agent4company-pi-resources-"));
   try {
@@ -273,8 +359,14 @@ test("Pi 清单与隔离 RPC 按 Profile 加载资源且只启用受控工具", 
 
     const companySkill = join(root, "pi", "skills", "manage-company");
     const salesSkill = join(root, "pi", "skills", "manage-sales-domain");
-    const company = await inspectPiResources("company-manager", [companySkill], join(agentDir, "company"));
+    const company = await inspectPiResources(
+      root,
+      "company-manager",
+      [companySkill],
+      join(agentDir, "company"),
+    );
     const sales = await inspectPiResources(
+      root,
       "company-with-sales",
       [companySkill, salesSkill],
       join(agentDir, "sales"),
@@ -302,5 +394,71 @@ test("Pi 清单与隔离 RPC 按 Profile 加载资源且只启用受控工具", 
     assert.ok(!company.activeTools.some((tool) => ["bash", "edit", "write"].includes(tool)));
   } finally {
     rmSync(agentDir, { recursive: true, force: true });
+  }
+});
+
+test("交付域 Profile 通过清单贡献真实 Pi Skill，无需销售特例", { timeout: 45_000 }, async () => {
+  const temporary = mkdtempSync(join(tmpdir(), "agent4company-delivery-profile-"));
+  try {
+    const project = join(temporary, "project");
+    cpSync(join(root, "plugins", "platform"), join(project, "plugins", "platform"), { recursive: true });
+    const domain = join(project, "plugins", "domains", "delivery");
+    mkdirSync(domain, { recursive: true });
+    writeFileSync(join(domain, "plugin.json"), JSON.stringify({
+      api_version: "company.platform/v1",
+      id: "domain.delivery",
+      version: "1.0.0",
+      kind: "business-domain",
+      display_name: "交付管理",
+      description: "合成交付域。",
+      permissions: ["delivery.read"],
+      write_permissions: [],
+      tools: [{ name: "delivery.read", effect: "read", permissions: ["delivery.read"] }],
+      dependencies: [],
+      capabilities: ["delivery.review"],
+      skills: ["manage-delivery-domain"],
+      workflows: [],
+    }), "utf8");
+    const profileDirectory = join(project, "profiles", "company-with-delivery");
+    mkdirSync(profileDirectory, { recursive: true });
+    writeFileSync(join(profileDirectory, "profile.json"), JSON.stringify({
+      id: "company-with-delivery",
+      display_name: "公司管理平台 · 交付域验证",
+      description: "合成验证 Profile。",
+      enabled_domains: ["domain.delivery"],
+      available_domains: ["domain.delivery"],
+      default_view: "company-overview",
+      default_workflow: null,
+      roles: ["company-admin"],
+    }), "utf8");
+    cpSync(
+      join(root, "pi", "skills", "manage-company"),
+      join(project, "pi", "skills", "manage-company"),
+      { recursive: true },
+    );
+    const deliverySkill = join(project, "pi", "skills", "manage-delivery-domain");
+    mkdirSync(deliverySkill, { recursive: true });
+    writeFileSync(
+      join(deliverySkill, "SKILL.md"),
+      "---\nname: manage-delivery-domain\ndescription: 合成交付域。\n---\n\n# 交付域\n",
+      "utf8",
+    );
+    const skills = resolveProfileSkillsWithPython(project, "company-with-delivery");
+    assert.deepEqual(skills.map((path) => path.replaceAll("\\", "/").split("/").at(-1)), [
+      "manage-company",
+      "manage-delivery-domain",
+    ]);
+    const inspected = await inspectPiResources(
+      project,
+      "company-with-delivery",
+      skills,
+      join(temporary, "agent"),
+    );
+    assert.deepEqual(
+      inspected.commands.filter((command) => command.source === "skill").map((command) => command.name).sort(),
+      ["skill:manage-company", "skill:manage-delivery-domain"],
+    );
+  } finally {
+    rmSync(temporary, { recursive: true, force: true });
   }
 });

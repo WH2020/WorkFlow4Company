@@ -74,6 +74,7 @@ class RuntimeStore:
             raise ValueError(f"运行时启用了未安装业务域：{', '.join(unavailable)}")
         self.enabled_domains = frozenset(selected_domains)
         self._initialize()
+        self._recover_active_tasks()
 
     def _connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self.database_path, timeout=10.0)
@@ -102,6 +103,8 @@ class RuntimeStore:
                     domain_id TEXT NOT NULL,
                     project_id TEXT,
                     workflow_id TEXT NOT NULL,
+                    plugin_version TEXT,
+                    workflow_fingerprint TEXT,
                     title TEXT NOT NULL,
                     status TEXT NOT NULL,
                     version INTEGER NOT NULL,
@@ -135,6 +138,8 @@ class RuntimeStore:
                     requested_role TEXT NOT NULL,
                     policy_id TEXT NOT NULL,
                     policy_version TEXT NOT NULL,
+                    plugin_version TEXT,
+                    workflow_fingerprint TEXT,
                     payload_json TEXT NOT NULL,
                     payload_sha256 TEXT NOT NULL,
                     storage_binding TEXT NOT NULL,
@@ -171,6 +176,85 @@ class RuntimeStore:
                     ON audit_events(company_id, domain_id, created_at);
                 """
             )
+            self._add_column_if_missing(connection, "tasks", "plugin_version", "TEXT")
+            self._add_column_if_missing(connection, "tasks", "workflow_fingerprint", "TEXT")
+            self._add_column_if_missing(connection, "approvals", "plugin_version", "TEXT")
+            self._add_column_if_missing(connection, "approvals", "workflow_fingerprint", "TEXT")
+
+    @staticmethod
+    def _add_column_if_missing(
+        connection: sqlite3.Connection, table: str, column: str, definition: str
+    ) -> None:
+        columns = {
+            row["name"]
+            for row in connection.execute(f"PRAGMA table_info({table})").fetchall()
+        }
+        if column not in columns:
+            connection.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+
+    def _recover_active_tasks(self) -> None:
+        """Resume running tasks and invalidate stale waiting approvals after restart."""
+        with self._connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT task_id, domain_id, workflow_id
+                FROM tasks
+                WHERE company_id = ? AND status IN ('running', 'waiting_approval')
+                ORDER BY created_at, task_id
+                """,
+                (self.company_id,),
+            ).fetchall()
+        for row in rows:
+            self._advance(row["task_id"])
+
+    def _workflow_fingerprint(self, workflow: Workflow) -> str:
+        plugin = self.registry.plugins[workflow.plugin]
+        referenced_tools = sorted(
+            {
+                node.tool
+                for node in workflow.nodes
+                if node.type == "tool" and node.tool is not None
+            }
+        )
+        contract = {
+            "plugin": {
+                "api_version": plugin.api_version,
+                "id": plugin.id,
+                "version": plugin.version,
+                "write_permissions": list(plugin.write_permissions),
+                "tools": [
+                    {
+                        "name": plugin.tool_map[name].name,
+                        "effect": plugin.tool_map[name].effect,
+                        "permissions": list(plugin.tool_map[name].permissions),
+                    }
+                    for name in referenced_tools
+                ],
+            },
+            "workflow": {
+                "id": workflow.id,
+                "plugin": workflow.plugin,
+                "display_name": workflow.display_name,
+                "description": workflow.description,
+                "entry_nodes": list(workflow.entry_nodes),
+                "output_nodes": list(workflow.output_nodes),
+                "nodes": [
+                    {
+                        "id": node.id,
+                        "type": node.type,
+                        "depends_on": list(node.depends_on),
+                        "permissions": list(node.permissions),
+                        "tool": node.tool,
+                        "skill": node.skill,
+                        "policy": node.policy,
+                        "check": node.check,
+                        "boundary": node.boundary,
+                    }
+                    for node in workflow.nodes
+                ],
+            },
+        }
+        return sha256_json(contract)
 
     @staticmethod
     def _row_dict(row: sqlite3.Row) -> dict[str, Any]:
@@ -242,14 +326,16 @@ class RuntimeStore:
             raise ValueError("项目 ID 无效")
         task_id = str(uuid4())
         timestamp = utc_now()
+        workflow_fingerprint = self._workflow_fingerprint(workflow)
         with self._connection() as connection:
             connection.execute("BEGIN IMMEDIATE")
             connection.execute(
                 """
                 INSERT INTO tasks (
-                    task_id, company_id, domain_id, project_id, workflow_id, title,
+                    task_id, company_id, domain_id, project_id, workflow_id,
+                    plugin_version, workflow_fingerprint, title,
                     status, version, requested_by, requested_role, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, 'running', 1, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'running', 1, ?, ?, ?, ?)
                 """,
                 (
                     task_id,
@@ -257,6 +343,8 @@ class RuntimeStore:
                     workflow.plugin,
                     project_id,
                     workflow.id,
+                    plugin.version,
+                    workflow_fingerprint,
                     normalized_title,
                     identity.actor_id,
                     identity.actor_role,
@@ -279,15 +367,25 @@ class RuntimeStore:
                 domain_id=workflow.plugin,
                 project_id=project_id,
                 task_id=task_id,
-                details={"workflow_id": workflow.id, "title": normalized_title},
+                details={
+                    "workflow_id": workflow.id,
+                    "plugin_version": plugin.version,
+                    "workflow_fingerprint": workflow_fingerprint,
+                    "title": normalized_title,
+                },
             )
         self._advance(task_id)
         return self.get_task(task_id)
 
-    def _node_summary(self, node: WorkflowNode) -> str:
+    def _is_write_tool(self, workflow: Workflow, node: WorkflowNode) -> bool:
+        plugin = self.registry.plugins[workflow.plugin]
+        declared = plugin.tool_map.get(node.tool or "")
+        return node.type == "tool" and declared is not None and declared.effect == "write"
+
+    def _node_summary(self, workflow: Workflow, node: WorkflowNode) -> str:
         if node.type == "agent":
             return "已生成仅含建议的分析草稿；尚未改变业务数据。"
-        if node.type == "tool" and any(permission.endswith(".write") for permission in node.permissions):
+        if self._is_write_tool(workflow, node):
             return "已按批准载荷记录业务域行动意图；第一阶段不写入真实业务数据。"
         if node.type == "tool":
             return "已在当前公司与业务域范围内读取空上下文。"
@@ -295,16 +393,39 @@ class RuntimeStore:
             return "已核对公司、业务域、审批和审计作用域。"
         return "节点已完成。"
 
-    def _approval_payload(self, task: sqlite3.Row, workflow: Workflow, node: WorkflowNode) -> dict[str, Any]:
+    def _protected_write_node(self, workflow: Workflow, approval_node: WorkflowNode) -> WorkflowNode:
+        protected = [
+            node
+            for node in workflow.nodes
+            if node.depends_on == (approval_node.id,) and self._is_write_tool(workflow, node)
+        ]
+        if len(protected) != 1:
+            raise ConflictError(f"审批节点 {approval_node.id} 未唯一绑定结构化写入")
+        return protected[0]
+
+    def _approval_payload(
+        self,
+        task: sqlite3.Row,
+        workflow: Workflow,
+        node: WorkflowNode,
+        *,
+        task_version: int | None = None,
+    ) -> dict[str, Any]:
+        plugin = self.registry.plugins[workflow.plugin]
+        protected_write = self._protected_write_node(workflow, node)
         return {
             "schema_version": "1.0",
             "company_id": task["company_id"],
             "domain_id": task["domain_id"],
             "project_id": task["project_id"],
             "task_id": task["task_id"],
-            "task_version": task["version"],
+            "task_version": task["version"] if task_version is None else task_version,
             "workflow_id": workflow.id,
+            "plugin_version": plugin.version,
+            "workflow_fingerprint": self._workflow_fingerprint(workflow),
             "approval_node_id": node.id,
+            "protected_write_node_id": protected_write.id,
+            "protected_tool": protected_write.tool,
             "title": task["title"],
             "proposed_change": f"记录“{workflow.display_name}”的业务行动意图（空数据验证）",
         }
@@ -312,6 +433,63 @@ class RuntimeStore:
     @staticmethod
     def _storage_binding(task: sqlite3.Row) -> str:
         return f"sqlite://{task['company_id']}/{task['domain_id']}/task-intents"
+
+    def _fail_stale_contract(
+        self,
+        connection: sqlite3.Connection,
+        task: sqlite3.Row,
+        identity: RuntimeIdentity,
+        reason: str,
+        *,
+        node_id: str | None = None,
+        policy_id: str | None = None,
+        payload_sha256: str | None = None,
+    ) -> None:
+        timestamp = utc_now()
+        connection.execute(
+            """
+            UPDATE task_nodes
+            SET status = 'failed', result_summary = ?, completed_at = ?
+            WHERE task_id = ? AND status NOT IN ('completed', 'rejected', 'failed', 'cancelled')
+            """,
+            (reason, timestamp, task["task_id"]),
+        )
+        connection.execute(
+            """
+            UPDATE tasks
+            SET status = 'failed', version = version + 1, updated_at = ?
+            WHERE task_id = ?
+            """,
+            (timestamp, task["task_id"]),
+        )
+        connection.execute(
+            """
+            UPDATE approvals
+            SET decision = 'invalidated', decided_by = ?, decided_role = ?,
+                reason = ?, decided_at = ?
+            WHERE task_id = ? AND decision = 'pending'
+            """,
+            (
+                identity.actor_id,
+                identity.actor_role,
+                reason,
+                timestamp,
+                task["task_id"],
+            ),
+        )
+        self._audit(
+            connection,
+            action="runtime.contract_invalidated",
+            result="rejected",
+            identity=identity,
+            domain_id=task["domain_id"],
+            project_id=task["project_id"],
+            task_id=task["task_id"],
+            node_id=node_id,
+            policy_id=policy_id,
+            payload_sha256=payload_sha256,
+            details={"reason": reason},
+        )
 
     def _advance(self, task_id: str) -> None:
         system_identity = RuntimeIdentity("dag-runtime", "platform-runtime", "system")
@@ -324,9 +502,32 @@ class RuntimeStore:
                 ).fetchone()
                 if task is None:
                     raise NotFoundError(f"任务不存在：{task_id}")
-                if task["status"] in TERMINAL_TASK_STATES or task["status"] == "waiting_approval":
+                if task["status"] in TERMINAL_TASK_STATES:
                     return
-                workflow = self.registry.workflows[task["workflow_id"]]
+                workflow = self.registry.workflows.get(task["workflow_id"])
+                if workflow is None or workflow.plugin != task["domain_id"]:
+                    self._fail_stale_contract(
+                        connection,
+                        task,
+                        system_identity,
+                        "运行任务对应的工作流已删除或业务域已变化，需重新发起。",
+                    )
+                    return
+                plugin = self.registry.plugins[workflow.plugin]
+                workflow_fingerprint = self._workflow_fingerprint(workflow)
+                if (
+                    task["plugin_version"] != plugin.version
+                    or task["workflow_fingerprint"] != workflow_fingerprint
+                ):
+                    self._fail_stale_contract(
+                        connection,
+                        task,
+                        system_identity,
+                        "插件版本或工作流规范已变化，旧任务已停止，需重新发起并审批。",
+                    )
+                    return
+                if task["status"] == "waiting_approval":
+                    return
                 state_rows = connection.execute(
                     "SELECT node_id, status FROM task_nodes WHERE task_id = ?",
                     (task_id,),
@@ -366,9 +567,10 @@ class RuntimeStore:
                             """
                             INSERT INTO approvals (
                                 approval_id, company_id, domain_id, project_id, task_id, node_id,
-                                requested_by, requested_role, policy_id, policy_version, payload_json,
-                                payload_sha256, storage_binding, expected_version, decision, created_at
-                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '1', ?, ?, ?, ?, 'pending', ?)
+                                requested_by, requested_role, policy_id, policy_version,
+                                plugin_version, workflow_fingerprint, payload_json, payload_sha256,
+                                storage_binding, expected_version, decision, created_at
+                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '1', ?, ?, ?, ?, ?, ?, 'pending', ?)
                             """,
                             (
                                 approval_id,
@@ -380,6 +582,8 @@ class RuntimeStore:
                                 task["requested_by"],
                                 task["requested_role"],
                                 node.policy,
+                                plugin.version,
+                                workflow_fingerprint,
                                 canonical_json(payload),
                                 payload_hash,
                                 self._storage_binding(task),
@@ -409,9 +613,7 @@ class RuntimeStore:
                             details={"approval_id": approval_id},
                         )
                         return
-                    if node.type == "tool" and any(
-                        permission.endswith(".write") for permission in node.permissions
-                    ):
+                    if self._is_write_tool(workflow, node):
                         approval_node_id = node.depends_on[0]
                         approval = connection.execute(
                             """
@@ -422,20 +624,48 @@ class RuntimeStore:
                         ).fetchone()
                         if approval is None or approval["expected_version"] != task["version"] - 1:
                             raise ConflictError("写入节点没有与当前任务版本绑定的有效审批")
-                        approval_node = workflow.node_map[approval_node_id]
-                        if (
-                            approval["storage_binding"] != self._storage_binding(task)
-                            or approval["policy_id"] != approval_node.policy
-                            or approval["policy_version"] != "1"
-                        ):
-                            raise ConflictError("写入节点审批的策略或存储绑定已变化")
+                        approval_node = workflow.node_map.get(approval_node_id)
+                        if approval_node is None or approval_node.type != "approval":
+                            self._fail_stale_contract(
+                                connection,
+                                task,
+                                system_identity,
+                                "已批准节点不再属于当前工作流，旧批准不得执行。",
+                                node_id=node.id,
+                                payload_sha256=approval["payload_sha256"],
+                            )
+                            return
                         try:
                             approved_payload = json.loads(approval["payload_json"])
                         except json.JSONDecodeError as error:
                             raise ConflictError("写入节点审批载荷无效") from error
-                        if sha256_json(approved_payload) != approval["payload_sha256"]:
-                            raise ConflictError("写入节点审批载荷哈希不一致")
-                    summary = self._node_summary(node)
+                        expected_payload = self._approval_payload(
+                            task,
+                            workflow,
+                            approval_node,
+                            task_version=approval["expected_version"],
+                        )
+                        binding_matches = (
+                            approval["storage_binding"] == self._storage_binding(task)
+                            and approval["policy_id"] == approval_node.policy
+                            and approval["policy_version"] == "1"
+                            and approval["plugin_version"] == plugin.version
+                            and approval["workflow_fingerprint"] == workflow_fingerprint
+                            and sha256_json(approved_payload) == approval["payload_sha256"]
+                            and canonical_json(approved_payload) == canonical_json(expected_payload)
+                        )
+                        if not binding_matches:
+                            self._fail_stale_contract(
+                                connection,
+                                task,
+                                system_identity,
+                                "审批绑定的插件版本、工作流、策略、载荷或存储范围已变化，旧批准不得执行。",
+                                node_id=node.id,
+                                policy_id=approval["policy_id"],
+                                payload_sha256=approval["payload_sha256"],
+                            )
+                            return
+                    summary = self._node_summary(workflow, node)
                     connection.execute(
                         """
                         UPDATE task_nodes
@@ -487,23 +717,75 @@ class RuntimeStore:
             ).fetchone()
             if task is None or task["status"] != "waiting_approval":
                 raise ConflictError("审批对应任务状态已变化")
+            workflow = self.registry.workflows.get(task["workflow_id"])
+            approval_node: WorkflowNode | None = None
+            payload: Any = None
+            stale_reason: str | None = None
             if approval["expected_version"] != task["version"]:
-                raise ConflictError("任务版本已变化，旧审批失效")
-            workflow = self.registry.workflows[task["workflow_id"]]
-            approval_node = workflow.node_map.get(approval["node_id"])
-            if approval_node is None or approval_node.type != "approval":
-                raise ConflictError("审批节点已不属于当前工作流")
-            if approval["policy_id"] != approval_node.policy or approval["policy_version"] != "1":
-                raise ConflictError("审批策略已变化")
-            if approval["storage_binding"] != self._storage_binding(task):
-                raise ConflictError("审批存储绑定已变化")
-            payload = json.loads(approval["payload_json"])
-            if sha256_json(payload) != approval["payload_sha256"]:
-                raise ConflictError("审批载荷哈希不一致")
-            if canonical_json(payload) != canonical_json(
-                self._approval_payload(task, workflow, approval_node)
-            ):
-                raise ConflictError("审批载荷与当前任务不一致")
+                stale_reason = "任务版本已变化，旧审批失效"
+            elif workflow is None or workflow.plugin != task["domain_id"]:
+                stale_reason = "审批对应工作流已删除或业务域已变化"
+            else:
+                plugin = self.registry.plugins[workflow.plugin]
+                workflow_fingerprint = self._workflow_fingerprint(workflow)
+                if (
+                    task["plugin_version"] != plugin.version
+                    or task["workflow_fingerprint"] != workflow_fingerprint
+                    or approval["plugin_version"] != plugin.version
+                    or approval["workflow_fingerprint"] != workflow_fingerprint
+                ):
+                    stale_reason = "插件版本或工作流规范已变化，旧审批失效"
+                else:
+                    approval_node = workflow.node_map.get(approval["node_id"])
+                    if approval_node is None or approval_node.type != "approval":
+                        stale_reason = "审批节点已不属于当前工作流"
+                    elif approval["policy_id"] != approval_node.policy or approval["policy_version"] != "1":
+                        stale_reason = "审批策略已变化"
+                    elif approval["storage_binding"] != self._storage_binding(task):
+                        stale_reason = "审批存储绑定已变化"
+                    else:
+                        try:
+                            payload = json.loads(approval["payload_json"])
+                        except json.JSONDecodeError:
+                            stale_reason = "审批载荷不是有效 JSON"
+                        if stale_reason is None and sha256_json(payload) != approval["payload_sha256"]:
+                            stale_reason = "审批载荷哈希不一致"
+                        if (
+                            stale_reason is None
+                            and canonical_json(payload)
+                            != canonical_json(self._approval_payload(task, workflow, approval_node))
+                        ):
+                            stale_reason = "审批载荷与当前任务不一致"
+            if stale_reason is not None:
+                timestamp = utc_now()
+                system_identity = RuntimeIdentity("dag-runtime", "platform-runtime", "system")
+                connection.execute(
+                    """
+                    UPDATE approvals
+                    SET decision = 'invalidated', decided_by = ?, decided_role = ?,
+                        reason = ?, decided_at = ?
+                    WHERE approval_id = ?
+                    """,
+                    (
+                        system_identity.actor_id,
+                        system_identity.actor_role,
+                        stale_reason,
+                        timestamp,
+                        approval_id,
+                    ),
+                )
+                self._fail_stale_contract(
+                    connection,
+                    task,
+                    system_identity,
+                    f"{stale_reason}；任务已停止，需按当前规范重新发起并审批。",
+                    node_id=approval["node_id"],
+                    policy_id=approval["policy_id"],
+                    payload_sha256=approval["payload_sha256"],
+                )
+                # 先持久化失效状态，再向调用方返回冲突；避免待审批永久悬挂。
+                connection.commit()
+                raise ConflictError(stale_reason)
             timestamp = utc_now()
             connection.execute(
                 """

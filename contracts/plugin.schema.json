@@ -11,6 +11,7 @@
     "display_name",
     "description",
     "permissions",
+    "write_permissions",
     "tools",
     "dependencies",
     "capabilities",
@@ -25,13 +26,19 @@
     "display_name": {"type": "string", "minLength": 1},
     "description": {"type": "string", "minLength": 1},
     "permissions": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+    "write_permissions": {
+      "type": "array",
+      "items": {"type": "string"},
+      "uniqueItems": true
+    },
     "tools": {
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["name", "permissions"],
+        "required": ["name", "effect", "permissions"],
         "properties": {
           "name": {"type": "string", "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$"},
+          "effect": {"enum": ["read", "write"]},
           "permissions": {
             "type": "array",
             "minItems": 1,
@@ -52,7 +59,11 @@
       }
     },
     "capabilities": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
-    "skills": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+    "skills": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$"},
+      "uniqueItems": true
+    },
     "workflows": {"type": "array", "items": {"type": "string"}, "uniqueItems": true}
   },
   "additionalProperties": true

@@ -7,7 +7,7 @@
 ## 2. 前置环境
 
 - Python 3.11 或更高版本。
-- Node.js 24.x 与 pnpm。
+- Node.js 24.19.0 或更高的 24.x 版本（`>=24.19.0 <25`）与 pnpm。
 - Windows WebView2 Runtime（Windows 11 通常已包含）。
 - 构建桌面程序时：Rust/Cargo、Microsoft C++ Build Tools。
 
@@ -33,8 +33,8 @@ Set-Location E:\PersonalWorkSpace\Agent4Company
 2. 创建本项目自己的 `.venv`。
 3. 在本项目安装 Node/Pi/Tauri 依赖。
 4. 校验插件、依赖、DAG、权限和审批边界。
-5. 在临时数据库执行销售域空数据自检。
-6. 通过 Pi 包解析器与 RPC 分别启动两个 Profile，验证公司扩展、Skill 和只读活动工具边界。
+5. 在临时数据库遍历声明默认工作流的验证 Profile，按状态处理单阶段或多阶段审批并完成空数据自检。
+6. 通过 Pi 包解析器与 RPC 分别启动两个 Profile，并以合成交付域证明业务域 Skill 由清单通用贡献，验证公司扩展、Skill 和只读活动工具边界。
 
 脚本不会创建或迁移真实业务数据，不会配置模型密钥，不会建立远端 Git 仓库。
 
@@ -75,6 +75,8 @@ python -m company_platform serve --profile company-with-sales --port 8766 --open
 ```
 
 两个 Profile 共用 `runtime/company-platform.db`。切换 Profile 不会创建第二套任务、审批或审计事实源；`enabled_domains` 只控制可发起的业务域工作流。
+
+若上次进程在任务提交后中断，下次启动会从 SQLite 已提交状态幂等恢复；已完成节点不会重放。恢复既有任务不受当前 Profile 的新建入口开关影响，因此从销售验证 Profile 切回默认公司 Profile 也不会冻结共享事实。若插件版本或工作流规范已经变化，旧任务会安全失败，待处理审批会标记失效，必须按当前规范重新发起。
 
 ## 5. 构建桌面程序
 

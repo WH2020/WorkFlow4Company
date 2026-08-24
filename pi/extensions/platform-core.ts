@@ -12,6 +12,7 @@ export type PluginDependency = {
 
 export type PluginTool = {
   name: string;
+  effect: "read" | "write";
   permissions: string[];
 };
 
@@ -23,6 +24,7 @@ export type PluginManifest = {
   display_name: string;
   description: string;
   permissions: string[];
+  write_permissions: string[];
   tools: PluginTool[];
   dependencies: PluginDependency[];
   capabilities: string[];
@@ -184,10 +186,20 @@ export function assertPluginManifest(value: unknown): PluginManifest {
   assertString(manifest.display_name, `插件 ${manifest.id} 显示名称`, 100);
   assertString(manifest.description, `插件 ${manifest.id} 描述`, 500);
   assertStringArray(manifest.permissions, `插件 ${manifest.id} 权限`);
+  assertStringArray(manifest.write_permissions, `插件 ${manifest.id} 写权限`);
+  const excessWritePermissions = manifest.write_permissions.filter(
+    (permission) => !manifest.permissions!.includes(permission),
+  );
+  if (excessWritePermissions.length > 0) {
+    throw new Error(`插件 ${manifest.id} 写权限未在 permissions 声明：${excessWritePermissions.join(", ")}`);
+  }
   if (!Array.isArray(manifest.tools)) throw new Error(`插件 ${manifest.id} tools 必须是数组`);
   const toolNames = new Set<string>();
   for (const tool of manifest.tools) {
     if (!tool || typeof tool !== "object") throw new Error(`插件 ${manifest.id} 工具声明无效`);
+    if (JSON.stringify(Object.keys(tool).sort()) !== JSON.stringify(["effect", "name", "permissions"])) {
+      throw new Error(`插件 ${manifest.id} 工具声明字段无效`);
+    }
     assertString(tool.name, `插件 ${manifest.id} 工具名`, 160);
     if (!SAFE_ID.test(tool.name) || toolNames.has(tool.name)) {
       throw new Error(`插件 ${manifest.id} 工具名无效或重复：${tool.name}`);
@@ -195,11 +207,23 @@ export function assertPluginManifest(value: unknown): PluginManifest {
     toolNames.add(tool.name);
     assertStringArray(tool.permissions, `插件 ${manifest.id}/${tool.name} 工具权限`);
     if (tool.permissions.length === 0) throw new Error(`插件 ${manifest.id}/${tool.name} 工具权限不能为空`);
+    if (tool.effect !== "read" && tool.effect !== "write") {
+      throw new Error(`插件 ${manifest.id}/${tool.name} 工具 effect 必须是 read 或 write`);
+    }
     const excess = tool.permissions.filter((permission) => !manifest.permissions!.includes(permission));
     if (excess.length > 0) throw new Error(`插件 ${manifest.id}/${tool.name} 工具越权：${excess.join(", ")}`);
+    const structuredPermissions = tool.permissions.filter((permission) => manifest.write_permissions!.includes(permission));
+    if (tool.effect === "read" && structuredPermissions.length > 0) {
+      throw new Error(`插件 ${manifest.id}/${tool.name} 只读工具不得持有写权限：${structuredPermissions.join(", ")}`);
+    }
+    if (tool.effect === "write" && structuredPermissions.length === 0) {
+      throw new Error(`插件 ${manifest.id}/${tool.name} 写工具必须持有至少一个 write_permissions 权限`);
+    }
   }
   assertStringArray(manifest.capabilities, `插件 ${manifest.id} 能力`);
   assertStringArray(manifest.skills, `插件 ${manifest.id} 技能`);
+  const invalidSkills = manifest.skills.filter((skill) => !SAFE_ID.test(skill));
+  if (invalidSkills.length > 0) throw new Error(`插件 ${manifest.id} 技能名无效：${invalidSkills.join(", ")}`);
   assertStringArray(manifest.workflows, `插件 ${manifest.id} 工作流`);
   if (!Array.isArray(manifest.dependencies)) throw new Error(`插件 ${manifest.id} dependencies 必须是数组`);
   for (const dependency of manifest.dependencies) {
@@ -255,6 +279,9 @@ export function validateRuntimeWorkflow(workflow: RuntimeWorkflow, manifest: Plu
   const declaredPermissions = new Set(manifest.permissions);
   const declaredSkills = new Set(manifest.skills);
   const declaredTools = new Map(manifest.tools.map((tool) => [tool.name, tool]));
+  const writePermissions = new Set(manifest.write_permissions);
+  const isWriteTool = (node: WorkflowNode): boolean =>
+    node.type === "tool" && declaredTools.get(node.tool ?? "")?.effect === "write";
   const nodes = new Map<string, WorkflowNode>();
   for (const node of workflow.nodes) {
     assertString(node.id, `工作流 ${workflow.id} 节点 ID`, 128);
@@ -264,7 +291,7 @@ export function validateRuntimeWorkflow(workflow: RuntimeWorkflow, manifest: Plu
     assertStringArray(node.permissions, `工作流 ${workflow.id}/${node.id} 权限`);
     const excess = node.permissions.filter((permission) => !declaredPermissions.has(permission));
     if (excess.length > 0) throw new Error(`工作流 ${workflow.id}/${node.id} 越权：${excess.join(", ")}`);
-    const structuredPermissions = node.permissions.filter((permission) => permission.endsWith(".write"));
+    const structuredPermissions = node.permissions.filter((permission) => writePermissions.has(permission));
     if (structuredPermissions.length > 0 && node.type !== "tool") {
       throw new Error(`工作流 ${workflow.id}/${node.id} 的结构化写权限只能声明在 Tool 节点`);
     }
@@ -315,8 +342,7 @@ export function validateRuntimeWorkflow(workflow: RuntimeWorkflow, manifest: Plu
   }
 
   for (const node of nodes.values()) {
-    const structuredWrite = node.type === "tool" && node.permissions.some((permission) => permission.endsWith(".write"));
-    if (!structuredWrite) continue;
+    if (!isWriteTool(node)) continue;
     if (node.depends_on.length !== 1 || nodes.get(node.depends_on[0]!)?.type !== "approval") {
       throw new Error(`工作流 ${workflow.id}/${node.id} 的结构化写入必须只有一个直接审批前驱`);
     }
@@ -325,7 +351,7 @@ export function validateRuntimeWorkflow(workflow: RuntimeWorkflow, manifest: Plu
       throw new Error(`工作流 ${workflow.id}/${approval.id} 的审批必须直接跟随分析或验证节点`);
     }
     const protectedWrites = [...nodes.values()].filter(
-      (candidate) => candidate.type === "tool" && candidate.depends_on.includes(approval.id) && candidate.permissions.some((permission) => permission.endsWith(".write")),
+      (candidate) => isWriteTool(candidate) && candidate.depends_on.includes(approval.id),
     );
     if (protectedWrites.length !== 1) throw new Error(`工作流 ${workflow.id}/${approval.id} 必须只保护一个直接写入节点`);
   }

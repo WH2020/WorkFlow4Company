@@ -50,7 +50,8 @@ cargo check --manifest-path .\desktop\src-tauri\Cargo.toml --locked
   "display_name": "交付管理",
   "description": "交付业务域。",
   "permissions": ["delivery.read"],
-  "tools": [{"name": "delivery.read", "permissions": ["delivery.read"]}],
+  "write_permissions": [],
+  "tools": [{"name": "delivery.read", "effect": "read", "permissions": ["delivery.read"]}],
   "dependencies": [{"id": "platform.project-space", "version": ">=1.0.0"}],
   "capabilities": ["delivery.review"],
   "skills": ["manage-delivery-domain"],
@@ -66,10 +67,13 @@ cargo check --manifest-path .\desktop\src-tauri\Cargo.toml --locked
 - Tool 名必须在逻辑工具权限表中登记。
 - Agent Skill 必须由插件声明。
 - Subagent 第一阶段只读，`write_scope=[]`。
-- 任何 `*.write` Tool 只有一个直接 Approval 前驱。
+- `effect=write` 的 Tool 只有一个直接 Approval 前驱；不能从 `.write`、`.create`、`.delete` 等名字推断效果。
+- 插件用 `write_permissions` 明确标记结构化写权限；`effect=write` 工具可同时携带只读权限，非 Tool 节点仅被禁止持有其中的写权限。
 - Approval 只保护一个直接写入，且直接跟随 Agent 或 Validator。
 
-新增逻辑工具时，在所属插件清单的 `tools` 中声明工具名和精确节点权限，并增加对应 Adapter 与正/负向测试。平台核心不得维护销售、交付等业务域工具白名单；Python 与 Pi 都从插件清单校验工具。
+新增逻辑工具时，在所属插件清单的 `tools` 中声明工具名、`effect` 和精确节点权限，在 `write_permissions` 声明写权限，并增加读写混合权限正向测试、审批防绕过负向测试及对应 Adapter 测试。平台核心不得维护销售、交付等业务域工具白名单；Python 与 Pi 都从插件清单校验工具。
+
+新增业务域 Skill 时，只在该域清单 `skills` 和 `pi/skills/<skill>/SKILL.md` 中声明，并保证目录名、插件声明和 `SKILL.md` frontmatter 的 `name` 三者一致；该 Skill 由启用业务域的 Profile 自动贡献。不得在 CLI、服务提示或公司主 Skill 中增加域 ID/Skill 名分支。修改已投产插件版本、工作流节点或工具契约时必须升级版本；运行时规范指纹仍会阻止同版本误改后沿用旧审批。
 
 ## 5. 工作台 API
 

@@ -6,9 +6,10 @@
   "display_name": "项目空间",
   "description": "按公司、业务域和项目隔离上下文、文件、任务与权限。",
   "permissions": ["project.read", "project.write"],
+  "write_permissions": ["project.write"],
   "tools": [
-    {"name": "project.read", "permissions": ["project.read"]},
-    {"name": "project.write", "permissions": ["project.write"]}
+    {"name": "project.read", "effect": "read", "permissions": ["project.read"]},
+    {"name": "project.write", "effect": "write", "permissions": ["project.write"]}
   ],
   "dependencies": [],
   "capabilities": ["project.workspace", "project.membership", "project.data-scope"],
