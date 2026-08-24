@@ -1,0 +1,22 @@
+{
+  "api_version": "company.platform/v1",
+  "id": "domain.sales",
+  "version": "1.0.0",
+  "kind": "business-domain",
+  "display_name": "销售管理",
+  "description": "首个可插拔业务域，负责销售机会、客户推进、资源协调和复盘，不承担平台治理职责。",
+  "permissions": ["knowledge.read", "sales.read", "sales.write", "task.audit.read"],
+  "tools": [
+    {"name": "sales.read", "permissions": ["sales.read", "knowledge.read"]},
+    {"name": "sales.write", "permissions": ["sales.write"]}
+  ],
+  "dependencies": [
+    {"id": "platform.knowledge", "version": ">=1.0.0"},
+    {"id": "platform.project-space", "version": ">=1.0.0"}
+  ],
+  "capabilities": ["sales.pipeline-review", "sales.action-governance"],
+  "skills": ["manage-sales-domain"],
+  "workflows": ["workflows/pipeline-review.json"],
+  "navigation": {"group": "业务域", "label": "销售管理", "order": 100},
+  "data_scope": {"tenant": "required", "domain": "domain.sales", "project": "optional"}
+}

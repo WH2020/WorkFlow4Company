@@ -1,0 +1,45 @@
+{
+  "id": "domain.sales.pipeline-review",
+  "plugin": "domain.sales",
+  "display_name": "销售管道复盘",
+  "description": "读取销售域事实，形成复盘建议，经业务负责人批准后记录行动意图并完成审计验证。",
+  "entry_nodes": ["load_sales_context"],
+  "output_nodes": ["verify_audit"],
+  "nodes": [
+    {
+      "id": "load_sales_context",
+      "type": "tool",
+      "tool": "sales.read",
+      "depends_on": [],
+      "permissions": ["sales.read", "knowledge.read"]
+    },
+    {
+      "id": "draft_review",
+      "type": "agent",
+      "skill": "manage-sales-domain",
+      "depends_on": ["load_sales_context"],
+      "permissions": ["sales.read", "knowledge.read"]
+    },
+    {
+      "id": "owner_approval",
+      "type": "approval",
+      "policy": "domain_owner_confirms_sales_changes",
+      "depends_on": ["draft_review"],
+      "permissions": []
+    },
+    {
+      "id": "record_actions",
+      "type": "tool",
+      "tool": "sales.write",
+      "depends_on": ["owner_approval"],
+      "permissions": ["sales.write"]
+    },
+    {
+      "id": "verify_audit",
+      "type": "validator",
+      "check": "approved_write_has_domain_scope_and_audit_event",
+      "depends_on": ["record_actions"],
+      "permissions": ["task.audit.read"]
+    }
+  ]
+}

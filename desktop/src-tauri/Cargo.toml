@@ -1,0 +1,21 @@
+[package]
+name = "agent4company-desktop"
+version = "0.1.0"
+description = "Agent4Company local-first desktop shell"
+authors = ["Agent4Company contributors"]
+edition = "2021"
+license = "MIT"
+
+[[bin]]
+name = "Agent4Company"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2.6.3", features = [] }
+
+[dependencies]
+tauri = { version = "2.11.5", features = [] }
+tauri-plugin-single-instance = "2"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61.2", features = ["Win32_UI_WindowsAndMessaging"] }

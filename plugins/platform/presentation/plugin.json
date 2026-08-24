@@ -1,0 +1,21 @@
+{
+  "api_version": "company.platform/v1",
+  "id": "platform.presentation",
+  "version": "1.0.0",
+  "kind": "platform-capability",
+  "display_name": "演示文稿工作室",
+  "description": "基于已核验事实规划、生成并渲染验证公司级演示文稿。",
+  "permissions": ["knowledge.read", "presentation.plan.write", "artifact.write"],
+  "tools": [
+    {"name": "presentation.plan", "permissions": ["knowledge.read", "presentation.plan.write"]},
+    {"name": "artifact.write", "permissions": ["artifact.write"]}
+  ],
+  "dependencies": [
+    {"id": "platform.knowledge", "version": ">=1.0.0"},
+    {"id": "platform.files", "version": ">=1.0.0"}
+  ],
+  "capabilities": ["presentation.plan", "presentation.build", "presentation.render-validate"],
+  "skills": ["plan-company-presentations"],
+  "workflows": [],
+  "configuration": {"mode": "adapter-ready", "requires_user_configuration": false}
+}

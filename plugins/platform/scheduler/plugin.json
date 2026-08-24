@@ -1,0 +1,19 @@
+{
+  "api_version": "company.platform/v1",
+  "id": "platform.scheduler",
+  "version": "1.0.0",
+  "kind": "platform-capability",
+  "display_name": "定时任务",
+  "description": "以统一 DAG 任务为执行对象触发计划，不创建第二套任务事实源。",
+  "permissions": ["schedule.read", "schedule.write", "task.create"],
+  "tools": [
+    {"name": "schedule.read", "permissions": ["schedule.read"]},
+    {"name": "schedule.write", "permissions": ["schedule.write"]},
+    {"name": "task.create", "permissions": ["task.create"]}
+  ],
+  "dependencies": [],
+  "capabilities": ["schedule.trigger", "schedule.history"],
+  "skills": [],
+  "workflows": [],
+  "configuration": {"mode": "disabled-until-configured", "requires_user_configuration": true}
+}

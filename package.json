@@ -1,0 +1,42 @@
+{
+  "name": "agent4company",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "面向公司整体管理的轻本体桌面平台，采用可插拔业务域、受控 DAG、审批与审计。",
+  "license": "MIT",
+  "engines": {
+    "node": ">=24.19.0 <25"
+  },
+  "scripts": {
+    "check:types": "tsc --noEmit",
+    "test:runtime": "node --test tests/plugin-runtime.test.ts",
+    "test:python": "python -m unittest discover -s tests -p \"test_*.py\" -v",
+    "test": "pnpm check:types && pnpm test:runtime && pnpm test:python",
+    "validate": "python -m company_platform validate",
+    "dev:workbench": "python -m company_platform serve --port 8766 --open-browser",
+    "desktop:dev": "tauri dev",
+    "desktop:build": "tauri build"
+  },
+  "pi": {
+    "extensions": [
+      "./pi/extensions/company-workflow.ts"
+    ],
+    "skills": [
+      "./pi/skills"
+    ]
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": ">=0.84.2",
+    "typebox": ">=1.3.15 <2"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "0.84.2",
+    "@tauri-apps/cli": "2.11.4",
+    "@types/node": "^24.10.0",
+    "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "typebox": "1.3.15"
+  }
+}

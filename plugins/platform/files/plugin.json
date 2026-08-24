@@ -1,0 +1,18 @@
+{
+  "api_version": "company.platform/v1",
+  "id": "platform.files",
+  "version": "1.0.0",
+  "kind": "platform-capability",
+  "display_name": "文件处理",
+  "description": "在项目空间内受控读取、提取、生成和验证文件。",
+  "permissions": ["file.read", "artifact.write"],
+  "tools": [
+    {"name": "file.extract", "permissions": ["file.read"]},
+    {"name": "artifact.write", "permissions": ["artifact.write"]}
+  ],
+  "dependencies": [{"id": "platform.project-space", "version": ">=1.0.0"}],
+  "capabilities": ["file.extract", "artifact.document", "artifact.validation"],
+  "skills": ["create-company-documents"],
+  "workflows": [],
+  "configuration": {"mode": "adapter-ready", "requires_user_configuration": false}
+}

@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>公司管理平台</title>
+  <link rel="icon" href="/icon.png" type="image/png">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="app-shell" id="appShell">
+    <aside class="sidebar" aria-label="主导航">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">
+          <span></span><span></span><span></span>
+        </div>
+        <div>
+          <p class="brand-name">公司管理平台</p>
+          <p class="brand-edition">Agent4Company</p>
+        </div>
+      </div>
+
+      <nav class="primary-nav" id="primaryNav">
+        <button class="nav-item is-active" data-view="overview" type="button">
+          <span class="nav-icon" aria-hidden="true">总</span><span>公司总览</span>
+        </button>
+        <button class="nav-item" data-view="tasks" type="button">
+          <span class="nav-icon" aria-hidden="true">任</span><span>任务中心</span>
+          <span class="nav-count" id="taskNavCount">0</span>
+        </button>
+        <button class="nav-item" data-view="approvals" type="button">
+          <span class="nav-icon" aria-hidden="true">审</span><span>审批中心</span>
+          <span class="nav-count attention" id="approvalNavCount">0</span>
+        </button>
+        <button class="nav-item" data-view="projects" type="button">
+          <span class="nav-icon" aria-hidden="true">项</span><span>项目空间</span>
+        </button>
+        <button class="nav-item" data-view="knowledge" type="button">
+          <span class="nav-icon" aria-hidden="true">知</span><span>知识与文件</span>
+        </button>
+        <button class="nav-item" data-view="domains" type="button">
+          <span class="nav-icon" aria-hidden="true">域</span><span>业务域</span>
+        </button>
+        <button class="nav-item" data-view="audit" type="button">
+          <span class="nav-icon" aria-hidden="true">迹</span><span>审计记录</span>
+        </button>
+        <button class="nav-item" data-view="settings" type="button">
+          <span class="nav-icon" aria-hidden="true">设</span><span>平台设置</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-spacer"></div>
+      <div class="runtime-card">
+        <div class="runtime-status"><span class="status-dot"></span>本机安全运行</div>
+        <p>数据仅保存在当前设备；外部模型与搜索尚未配置。</p>
+        <button class="text-button" data-view="settings" type="button">查看运行状态</button>
+      </div>
+      <div class="user-card">
+        <div class="avatar">管</div>
+        <div>
+          <strong>本地管理员</strong>
+          <span>第一阶段单人模式</span>
+        </div>
+      </div>
+    </aside>
+
+    <main class="workspace">
+      <header class="topbar">
+        <div class="topbar-title">
+          <p id="pageEyebrow">统一工作台</p>
+          <h1 id="pageTitle">公司总览</h1>
+        </div>
+        <div class="topbar-actions">
+          <label class="global-search">
+            <span aria-hidden="true">⌕</span>
+            <input type="search" placeholder="搜索任务、项目和知识" aria-label="搜索任务、项目和知识" disabled>
+            <kbd>即将开放</kbd>
+          </label>
+          <button class="icon-button" id="refreshButton" type="button" title="刷新工作台" aria-label="刷新工作台">↻</button>
+          <button class="primary-button" id="newTaskButton" type="button"><span>＋</span>发起任务</button>
+        </div>
+      </header>
+
+      <div class="content-scroll" id="contentScroll">
+        <section class="view is-visible" id="view-overview" data-title="公司总览" data-eyebrow="统一工作台">
+          <div class="hero-panel">
+            <div class="hero-copy">
+              <span class="eyebrow-chip">本地优先 · 受控执行</span>
+              <h2>今天，从公司的关键事项开始</h2>
+              <p>统一查看任务、审批和业务域。所有结构化写入都必须经过明确审批，并留下可追溯记录。</p>
+              <div class="hero-actions">
+                <button class="primary-button large" id="heroTaskButton" type="button">发起公司任务</button>
+                <button class="secondary-button large" data-view="domains" type="button">查看业务域</button>
+              </div>
+            </div>
+            <div class="hero-visual" aria-hidden="true">
+              <div class="orbit orbit-one"></div>
+              <div class="orbit orbit-two"></div>
+              <div class="core-node"><span>π</span><small>智能核心</small></div>
+              <div class="domain-node business-node">业务域</div>
+              <div class="domain-node knowledge-node">知识</div>
+              <div class="domain-node project-node">项目</div>
+            </div>
+          </div>
+
+          <div class="metric-grid" id="metricGrid">
+            <article class="metric-card"><span class="metric-icon blue">任</span><div><p>运行中任务</p><strong id="metricRunning">0</strong><small>统一 DAG 任务</small></div></article>
+            <article class="metric-card"><span class="metric-icon amber">审</span><div><p>待处理审批</p><strong id="metricApprovals">0</strong><small>需要人工确认</small></div></article>
+            <article class="metric-card"><span class="metric-icon green">完</span><div><p>已完成任务</p><strong id="metricCompleted">0</strong><small>本地审计已记录</small></div></article>
+            <article class="metric-card"><span class="metric-icon violet">域</span><div><p>已启用业务域</p><strong id="metricDomains">0</strong><small>按组合受控启用</small></div></article>
+          </div>
+
+          <div class="overview-grid">
+            <section class="panel focus-panel">
+              <div class="panel-heading">
+                <div><span class="section-kicker">我的工作</span><h3>需要关注</h3></div>
+                <button class="text-button" data-view="tasks" type="button">查看全部</button>
+              </div>
+              <div id="attentionList" class="attention-list"></div>
+            </section>
+
+            <section class="panel quick-panel">
+              <div class="panel-heading">
+                <div><span class="section-kicker">快速开始</span><h3>常用工作</h3></div>
+              </div>
+              <button class="quick-action" id="domainWorkflowQuickAction" type="button">
+                <span class="quick-icon domain">域</span>
+                <span><strong id="domainWorkflowName">业务域工作</strong><small id="domainWorkflowHint">由已接入插件提供</small></span>
+                <span class="arrow">→</span>
+              </button>
+              <button class="quick-action" data-view="approvals" type="button">
+                <span class="quick-icon approval">审</span>
+                <span><strong>处理待审批事项</strong><small>核对范围、载荷与影响</small></span>
+                <span class="arrow">→</span>
+              </button>
+              <button class="quick-action" data-view="knowledge" type="button">
+                <span class="quick-icon knowledge">知</span>
+                <span><strong>查看共享能力</strong><small>知识、文件、搜索与演示文稿</small></span>
+                <span class="arrow">→</span>
+              </button>
+            </section>
+          </div>
+
+          <section class="panel notice-panel" id="noticePanel"></section>
+        </section>
+
+        <section class="view" id="view-tasks" data-title="任务中心" data-eyebrow="统一执行">
+          <div class="section-intro">
+            <div><span class="section-kicker">单一事实来源</span><h2>所有业务域共用一套任务</h2><p>节点由受控 DAG 推进；任务状态、审批与审计不会分散到其他待办系统。</p></div>
+            <button class="primary-button" data-open-task type="button">＋ 发起任务</button>
+          </div>
+          <div class="filter-row" role="group" aria-label="任务筛选">
+            <button class="filter-chip is-active" data-task-filter="all" type="button">全部</button>
+            <button class="filter-chip" data-task-filter="waiting_approval" type="button">待审批</button>
+            <button class="filter-chip" data-task-filter="completed" type="button">已完成</button>
+          </div>
+          <div class="panel list-panel" id="taskList"></div>
+        </section>
+
+        <section class="view" id="view-approvals" data-title="审批中心" data-eyebrow="人工决策">
+          <div class="section-intro">
+            <div><span class="section-kicker">写入门禁</span><h2>确认后，系统才会继续</h2><p>每次审批都绑定公司、业务域、任务版本、策略和精确载荷哈希。</p></div>
+          </div>
+          <div class="approval-layout">
+            <div class="panel list-panel" id="approvalList"></div>
+            <aside class="panel guidance-panel">
+              <span class="guidance-icon">✓</span>
+              <h3>审批前请核对</h3>
+              <ul>
+                <li>事项是否属于当前公司与业务域</li>
+                <li>拟执行内容是否与任务目标一致</li>
+                <li>任务版本和载荷是否未被替换</li>
+                <li>不确定时先驳回并补充说明</li>
+              </ul>
+            </aside>
+          </div>
+        </section>
+
+        <section class="view" id="view-projects" data-title="项目空间" data-eyebrow="跨域协作">
+          <div class="empty-feature panel">
+            <div class="empty-illustration project-illustration"><span>项</span></div>
+            <span class="status-pill ready">能力已接入</span>
+            <h2>用项目组织跨域工作</h2>
+            <p>项目空间将任务、文件、知识和业务对象链接到同一上下文，但不会复制销售等业务域的数据。</p>
+            <div class="scope-row"><span>公司范围</span><b>→</b><span>业务域</span><b>→</b><span>项目范围</span></div>
+            <button class="secondary-button" type="button" disabled>创建项目 · 后续阶段</button>
+          </div>
+        </section>
+
+        <section class="view" id="view-knowledge" data-title="知识与文件" data-eyebrow="共享能力">
+          <div class="section-intro">
+            <div><span class="section-kicker">平台能力</span><h2>以证据和项目范围组织内容</h2><p>共享能力与业务域解耦；未配置的外部服务会明确降级，不影响本地工作台启动。</p></div>
+          </div>
+          <div class="capability-grid" id="capabilityGrid"></div>
+        </section>
+
+        <section class="view" id="view-domains" data-title="业务域" data-eyebrow="可插拔能力">
+          <div class="section-intro">
+            <div><span class="section-kicker">业务边界</span><h2>按业务域扩展，不改平台本体</h2><p>业务域贡献自己的流程、技能和导航，并服从公司级权限、审批、审计与数据隔离。</p></div>
+          </div>
+          <div class="domain-grid" id="domainGrid"></div>
+          <div class="architecture-note panel">
+            <strong>平台不变量</strong>
+            <p>移除销售域后，公司工作台、共享能力、任务、审批与审计仍能独立启动。新增业务域不需要修改核心代码。</p>
+          </div>
+        </section>
+
+        <section class="view" id="view-audit" data-title="审计记录" data-eyebrow="全程留痕">
+          <div class="section-intro">
+            <div><span class="section-kicker">只读追溯</span><h2>知道谁、在何时、做了什么</h2><p>第一阶段审计记录保存在本机统一数据库，敏感密钥不会写入事件。</p></div>
+          </div>
+          <div class="panel audit-panel" id="auditList"></div>
+        </section>
+
+        <section class="view" id="view-settings" data-title="平台设置" data-eyebrow="运行与连接">
+          <div class="settings-grid">
+            <section class="panel settings-card">
+              <span class="settings-icon green">本</span><div><h3>本地运行</h3><p>工作台绑定 127.0.0.1，任务数据保存在当前项目的忽略目录。</p><span class="status-pill ready">运行正常</span></div>
+            </section>
+            <section class="panel settings-card">
+              <span class="settings-icon amber">模</span><div><h3>模型接入</h3><p>通过提供方适配器接入；密钥只从本机安全配置读取。</p><span class="status-pill pending">尚未配置</span></div>
+            </section>
+            <section class="panel settings-card">
+              <span class="settings-icon blue">搜</span><div><h3>聚合搜索</h3><p>当前仅提供本地知识入口；公开搜索提供方需要用户配置。</p><span class="status-pill pending">本地模式</span></div>
+            </section>
+            <section class="panel settings-card">
+              <span class="settings-icon violet">时</span><div><h3>定时任务</h3><p>调度只创建统一 DAG 任务，不会自动批准或另建待办事实源。</p><span class="status-pill pending">默认关闭</span></div>
+            </section>
+          </div>
+          <section class="panel boundary-panel">
+            <span class="section-kicker">第一阶段边界</span><h3>当前采用本机单人身份</h3>
+            <p>权限表和审计记录已经保留公司、业务域、项目、操作者和角色字段，但尚未接入企业 SSO、多人协同或生产级多租户。正式部署前需要用户决定身份源与隔离等级。</p>
+          </section>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <dialog class="task-dialog" id="taskDialog" aria-labelledby="taskDialogTitle">
+    <form method="dialog" id="taskForm">
+      <div class="dialog-header">
+        <div><span class="section-kicker">受控工作流</span><h2 id="taskDialogTitle">发起任务</h2></div>
+        <button class="dialog-close" value="cancel" type="submit" aria-label="关闭">×</button>
+      </div>
+      <div class="dialog-body">
+        <label class="field"><span>选择工作</span><select id="workflowSelect" required></select><small id="workflowDescription">选择由业务域提供的受控流程。</small></label>
+        <label class="field"><span>任务名称</span><input id="taskTitle" maxlength="160" required placeholder="例如：本周业务复盘"><small>请描述目标，不要在标题中填写业务隐私或密钥。</small></label>
+        <label class="field"><span>项目编号 <em>可选</em></span><input id="projectId" maxlength="128" placeholder="例如：project-demo"></label>
+        <div class="approval-hint"><span>审</span><p><strong>写入前会停下来</strong>流程会先生成建议；涉及结构化写入时，必须由你在审批中心确认。</p></div>
+      </div>
+      <div class="dialog-footer">
+        <button class="secondary-button" value="cancel" type="submit">取消</button>
+        <button class="primary-button" id="submitTaskButton" value="default" type="submit">开始任务</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div class="toast-region" id="toastRegion" aria-live="polite"></div>
+  <div class="loading-cover" id="loadingCover"><div class="loader-mark"><span></span><span></span><span></span></div><p>正在准备公司工作台…</p></div>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

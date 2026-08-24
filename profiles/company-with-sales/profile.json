@@ -1,0 +1,10 @@
+{
+  "id": "company-with-sales",
+  "display_name": "公司管理平台 · 销售域验证",
+  "description": "用于验证销售域插件接入的组合 Profile；公司管理平台本体不依赖本 Profile。",
+  "enabled_domains": ["domain.sales"],
+  "available_domains": ["domain.sales"],
+  "default_view": "company-overview",
+  "default_workflow": "domain.sales.pipeline-review",
+  "roles": ["company-admin", "domain-owner", "member", "auditor"]
+}

@@ -1,0 +1,18 @@
+{
+  "api_version": "company.platform/v1",
+  "id": "platform.knowledge",
+  "version": "1.0.0",
+  "kind": "platform-capability",
+  "display_name": "公司知识库",
+  "description": "统一登记来源、检索证据并在审批后沉淀知识。",
+  "permissions": ["knowledge.read", "knowledge.write"],
+  "tools": [
+    {"name": "knowledge.search", "permissions": ["knowledge.read"]},
+    {"name": "knowledge.write", "permissions": ["knowledge.write"]}
+  ],
+  "dependencies": [],
+  "capabilities": ["knowledge.search", "knowledge.source-register", "knowledge.governed-write"],
+  "skills": ["manage-company-knowledge"],
+  "workflows": [],
+  "configuration": {"mode": "local-empty", "requires_user_configuration": false}
+}

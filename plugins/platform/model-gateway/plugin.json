@@ -1,0 +1,17 @@
+{
+  "api_version": "company.platform/v1",
+  "id": "platform.model-gateway",
+  "version": "1.0.0",
+  "kind": "platform-capability",
+  "display_name": "模型接入",
+  "description": "以提供方适配器统一模型选择、凭据边界和调用审计。",
+  "permissions": ["model.invoke", "model.config.read"],
+  "tools": [
+    {"name": "model.invoke", "permissions": ["model.invoke"]}
+  ],
+  "dependencies": [],
+  "capabilities": ["model.provider-registry", "model.invoke", "model.audit"],
+  "skills": [],
+  "workflows": [],
+  "configuration": {"mode": "unconfigured", "requires_user_configuration": true}
+}

@@ -1,0 +1,48 @@
+# Local runtimes, credentials, and user configuration
+.venv/
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.pfx
+.pi/
+runtime/
+node_modules/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# User and business data. Only empty markers and synthetic examples are allowed.
+data/**
+!data/**/
+!data/**/.gitkeep
+!data/**/*.example.*
+inputs/**
+!inputs/.gitkeep
+outputs/
+backups/
+*.db
+*.db-*
+*.sqlite
+*.sqlite-*
+*.sqlite3
+
+# Generated and temporary content
+tmp/
+.tmp/
+dist/
+desktop/src-tauri/target/
+desktop/src-tauri/gen/
+*.log
+*.bak
+*.cache
+*.tmp
+
+# Installers and packaged binaries are built locally, never committed.
+*.exe
+*.msi
+*.dmg
+*.zip
+*.7z
+*.rar

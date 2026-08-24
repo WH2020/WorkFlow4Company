@@ -1,0 +1,18 @@
+{
+  "api_version": "company.platform/v1",
+  "id": "platform.project-space",
+  "version": "1.0.0",
+  "kind": "platform-capability",
+  "display_name": "项目空间",
+  "description": "按公司、业务域和项目隔离上下文、文件、任务与权限。",
+  "permissions": ["project.read", "project.write"],
+  "tools": [
+    {"name": "project.read", "permissions": ["project.read"]},
+    {"name": "project.write", "permissions": ["project.write"]}
+  ],
+  "dependencies": [],
+  "capabilities": ["project.workspace", "project.membership", "project.data-scope"],
+  "skills": [],
+  "workflows": [],
+  "configuration": {"mode": "local-empty", "requires_user_configuration": false}
+}

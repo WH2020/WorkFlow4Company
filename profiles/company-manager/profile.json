@@ -1,0 +1,10 @@
+{
+  "id": "company-manager",
+  "display_name": "公司管理平台",
+  "description": "公司级统一工作台。平台本体只提供治理与能力编排，业务职责由可插拔业务域承担。",
+  "enabled_domains": [],
+  "available_domains": ["domain.sales"],
+  "default_view": "company-overview",
+  "default_workflow": null,
+  "roles": ["company-admin", "domain-owner", "member", "auditor"]
+}
