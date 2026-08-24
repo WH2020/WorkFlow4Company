@@ -10,11 +10,18 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class RepositoryHygieneTests(unittest.TestCase):
-    def test_no_remote_is_configured(self) -> None:
+    def test_authorized_company_remote_is_configured(self) -> None:
         result = subprocess.run(
-            ["git", "remote"], cwd=ROOT, text=True, capture_output=True, check=True
+            ["git", "remote", "get-url", "origin"],
+            cwd=ROOT,
+            text=True,
+            capture_output=True,
+            check=True,
         )
-        self.assertEqual("", result.stdout.strip())
+        self.assertEqual(
+            "https://github.com/WH2020/WorkFlow4Company.git",
+            result.stdout.strip(),
+        )
 
     def test_forbidden_runtime_content_is_not_tracked(self) -> None:
         result = subprocess.run(
@@ -63,7 +70,6 @@ class RepositoryHygieneTests(unittest.TestCase):
     def test_source_remote_is_not_reused(self) -> None:
         config = (ROOT / ".git/config").read_text(encoding="utf-8")
         self.assertNotIn("WorkFlow_Market", config)
-        self.assertNotIn("github.com/WH2020", config)
 
 
 if __name__ == "__main__":

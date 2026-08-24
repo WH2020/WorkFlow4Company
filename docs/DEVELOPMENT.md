@@ -18,14 +18,18 @@ pnpm check:types
 pnpm test:runtime
 ```
 
-`pnpm test:runtime` 会通过 Pi 0.84.2 的包资源解析器和真实 RPC 进程分别检查两个 Profile：确认公司扩展、`manage-company` 与销售验证 Skill 的加载边界，并断言 `active_tools` 只有三项只读公司治理工具、不含 `bash/edit/write`。仅检查 `pi --version` 不算接入验证。
+`pnpm test:runtime` 会通过 Pi 0.84.2 的包资源解析器和真实 RPC 进程分别检查两个 Profile：确认公司扩展、`manage-company` 与销售验证 Skill 的加载边界，并断言 `active_tools` 只有四项只读工具（能力目录、工作流规划、域权限检查、受限资料证据检索），不含 `bash/edit/write`。仅检查 `pi --version` 不算接入验证。
 
 桌面代码：
 
 ```powershell
 cargo fmt --manifest-path .\desktop\src-tauri\Cargo.toml -- --check
 cargo check --manifest-path .\desktop\src-tauri\Cargo.toml --locked
+.\scripts\build-windows-desktop.ps1
+.\scripts\verify-windows-desktop.ps1
 ```
+
+最后一条命令会启动真实 Release 桌面进程，核对健康接口、公司 Profile、资料库能力与导航，再通过关闭主窗口验证正常退出；执行前要求 8766 端口空闲。
 
 ## 3. 添加业务域
 
@@ -87,12 +91,22 @@ cargo check --manifest-path .\desktop\src-tauri\Cargo.toml --locked
 | GET | `/api/approvals` | 待审批列表 |
 | POST | `/api/approvals/<id>/decision` | 批准或驳回 |
 | GET | `/api/audit` | 只读审计事件 |
+| GET | `/api/library` | 公司资料概况、筛选和本地证据搜索 |
+| GET | `/api/library/items/<id>` | 资料详情、当前预览与不可变版本历史 |
+| GET | `/api/library/versions/<id>/content` | 复核 SHA-256 后下载原文件 |
+| POST | `/api/library/import` | multipart 导入首版或新版本，文件上限 50 MB |
+| POST | `/api/library/items/<id>/current` | 本人确认后切换当前版本 |
+| POST | `/api/library/items/<id>/archive` | 本人确认后归档 |
+| POST | `/api/library/items/<id>/restore` | 本人确认后恢复 |
+| POST | `/api/library/items/<id>/metadata` | 更新资料信息；降低密级需本人确认 |
 
-POST 必须发送 `X-Company-Session`，服务只接受当前本机端口的 Host。第一阶段令牌来自 bootstrap，属于本机误操作防护，不是企业用户认证。
+POST 和全部资料库读接口必须发送 `X-Company-Session`，服务只接受当前本机端口的 Host。第一阶段令牌来自 bootstrap，属于本机误操作防护，不是企业用户认证。
 
 ## 6. 数据与迁移
 
 - `runtime/` 只放本机任务、审批和审计验证数据。
+- 资料库元数据表与统一审计表共用 `runtime/company-platform.db`；内容寻址原文件位于 `runtime/library/blobs/`，两者都不得提交。
+- `library_versions` 由 SQLite 触发器禁止更新和删除；新增字段必须提供向前迁移，不能绕过不可变约束修改历史版本。
 - `data/**/*.example.*` 必须为空模板或明显合成数据。
 - 真实数据迁移要单独定义字段映射、公司/域/项目作用域、备份、激活回执和回滚。
 - 未经明确授权，不执行真实数据库迁移、远端发布或插件安装。

@@ -37,7 +37,7 @@
           <span class="nav-icon" aria-hidden="true">项</span><span>项目空间</span>
         </button>
         <button class="nav-item" data-view="knowledge" type="button">
-          <span class="nav-icon" aria-hidden="true">知</span><span>知识与文件</span>
+          <span class="nav-icon" aria-hidden="true">资</span><span>公司资料库</span>
         </button>
         <button class="nav-item" data-view="domains" type="button">
           <span class="nav-icon" aria-hidden="true">域</span><span>业务域</span>
@@ -74,8 +74,8 @@
         <div class="topbar-actions">
           <label class="global-search">
             <span aria-hidden="true">⌕</span>
-            <input type="search" placeholder="搜索任务、项目和知识" aria-label="搜索任务、项目和知识" disabled>
-            <kbd>即将开放</kbd>
+            <input id="globalSearchInput" type="search" placeholder="搜索 BP、专利和开发文档" aria-label="搜索公司资料">
+            <kbd>资料库</kbd>
           </label>
           <button class="icon-button" id="refreshButton" type="button" title="刷新工作台" aria-label="刷新工作台">↻</button>
           <button class="primary-button" id="newTaskButton" type="button"><span>＋</span>发起任务</button>
@@ -136,7 +136,7 @@
               </button>
               <button class="quick-action" data-view="knowledge" type="button">
                 <span class="quick-icon knowledge">知</span>
-                <span><strong>查看共享能力</strong><small>知识、文件、搜索与演示文稿</small></span>
+                <span><strong>打开公司资料库</strong><small>BP、专利与开发文档</small></span>
                 <span class="arrow">→</span>
               </button>
             </section>
@@ -188,11 +188,51 @@
           </div>
         </section>
 
-        <section class="view" id="view-knowledge" data-title="知识与文件" data-eyebrow="共享能力">
+        <section class="view" id="view-knowledge" data-title="公司资料库" data-eyebrow="公司资料">
           <div class="section-intro">
-            <div><span class="section-kicker">平台能力</span><h2>以证据和项目范围组织内容</h2><p>共享能力与业务域解耦；未配置的外部服务会明确降级，不影响本地工作台启动。</p></div>
+            <div><span class="section-kicker">本机私有 · 小规模起步</span><h2>把公司的关键资料放在一个可靠的位置</h2><p>先管理 BP、专利和开发文档。原文件只保存在本机，每个版本都可追溯，检索结果会标明来源。</p></div>
+            <button class="primary-button" id="libraryImportButton" type="button">＋ 导入资料</button>
           </div>
-          <div class="capability-grid" id="capabilityGrid"></div>
+
+          <div class="library-stat-grid" aria-label="资料库概况">
+            <article><span>全部资料</span><strong id="libraryTotalCount">0</strong><small>未归档</small></article>
+            <article><span>BP</span><strong id="libraryBpCount">0</strong><small>商业计划与路演材料</small></article>
+            <article><span>专利</span><strong id="libraryPatentCount">0</strong><small>默认高度保密</small></article>
+            <article><span>开发文档</span><strong id="libraryDevelopmentCount">0</strong><small>方案、接口与验证记录</small></article>
+          </div>
+
+          <div class="library-layout">
+            <aside class="panel library-sidebar" aria-label="资料分类">
+              <strong>资料范围</strong>
+              <button class="library-filter is-active" data-library-filter="all" type="button"><span>全部资料</span><b id="libraryFilterAllCount">0</b></button>
+              <button class="library-filter" data-library-filter="bp" type="button"><span>BP</span><b id="libraryFilterBpCount">0</b></button>
+              <button class="library-filter" data-library-filter="patent" type="button"><span>专利</span><b id="libraryFilterPatentCount">0</b></button>
+              <button class="library-filter" data-library-filter="development" type="button"><span>开发文档</span><b id="libraryFilterDevelopmentCount">0</b></button>
+              <button class="library-filter" data-library-filter="general" type="button"><span>公司通用</span><b id="libraryFilterGeneralCount">0</b></button>
+              <div class="library-filter-separator"></div>
+              <button class="library-filter" data-library-filter="archived" type="button"><span>已归档</span><b id="libraryFilterArchivedCount">0</b></button>
+              <div class="library-local-note"><span>本</span><p><strong>只在本机保存</strong>不会自动上传给外部模型或搜索服务。</p></div>
+            </aside>
+
+            <section class="panel library-browser" aria-label="资料列表">
+              <div class="library-toolbar">
+                <label><span aria-hidden="true">⌕</span><input id="librarySearchInput" type="search" placeholder="搜索标题、标签或正文"></label>
+                <select id="librarySortSelect" aria-label="资料排序"><option value="updated">最近更新</option><option value="title">按标题</option></select>
+              </div>
+              <div class="library-result-summary" id="libraryResultSummary">正在读取本机资料…</div>
+              <div class="library-list" id="libraryList"></div>
+            </section>
+
+            <aside class="panel library-detail" id="libraryDetail" aria-label="资料详情">
+              <div class="library-detail-empty"><span>资</span><h3>选择一份资料</h3><p>这里会显示当前版本、正文预览、来源位置和历史版本。</p></div>
+            </aside>
+          </div>
+
+          <details class="panel capability-disclosure">
+            <summary>查看资料库依赖的共享能力</summary>
+            <p>资料库复用文件处理、知识检索与本地安全边界；其他未配置能力不会影响资料管理。</p>
+            <div class="capability-grid compact" id="capabilityGrid"></div>
+          </details>
         </section>
 
         <section class="view" id="view-domains" data-title="业务域" data-eyebrow="可插拔能力">
@@ -252,6 +292,34 @@
       <div class="dialog-footer">
         <button class="secondary-button" value="cancel" type="submit">取消</button>
         <button class="primary-button" id="submitTaskButton" value="default" type="submit">开始任务</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog class="task-dialog library-dialog" id="libraryDialog" aria-labelledby="libraryDialogTitle">
+    <form method="dialog" id="libraryForm">
+      <div class="dialog-header">
+        <div><span class="section-kicker">本机资料</span><h2 id="libraryDialogTitle">导入资料</h2></div>
+        <button class="dialog-close" value="cancel" type="submit" aria-label="关闭">×</button>
+      </div>
+      <div class="dialog-body">
+        <label class="file-drop" id="libraryFileDrop">
+          <input id="libraryFile" type="file" required accept=".pdf,.docx,.pptx,.xlsx,.txt,.md,.csv,.json">
+          <span class="file-drop-icon">文</span>
+          <span><strong id="libraryFilePrompt">选择文件</strong><small>支持 PDF、Word、PPT、Excel 和文本文件；单个文件不超过 50 MB。</small></span>
+        </label>
+        <label class="field"><span>资料名称 <em>可选</em></span><input id="libraryTitle" maxlength="160" placeholder="默认使用文件名"></label>
+        <div class="field-grid">
+          <label class="field"><span>资料类型</span><select id="libraryCategory" required><option value="bp">BP</option><option value="patent">专利</option><option value="development">开发文档</option><option value="general">公司通用</option></select></label>
+          <label class="field"><span>保密级别</span><select id="libraryConfidentiality" required><option value="confidential">保密</option><option value="highly_confidential">高度保密</option><option value="internal">内部</option></select></label>
+        </div>
+        <label class="field"><span>标签 <em>可选</em></span><input id="libraryTags" maxlength="300" placeholder="例如：融资、核心算法、V1（用逗号分隔）"></label>
+        <label class="field"><span>版本说明 <em>可选</em></span><textarea id="libraryNote" maxlength="500" rows="3" placeholder="例如：更新市场规模与财务预测"></textarea></label>
+        <div class="approval-hint"><span>安</span><p><strong>导入前会进行安全检查</strong>系统会核对文件类型和内容特征，并以哈希保存不可变版本。专利默认使用“高度保密”。</p></div>
+      </div>
+      <div class="dialog-footer">
+        <button class="secondary-button" value="cancel" type="submit">取消</button>
+        <button class="primary-button" id="librarySubmitButton" value="default" type="submit">导入并建立版本</button>
       </div>
     </form>
   </dialog>

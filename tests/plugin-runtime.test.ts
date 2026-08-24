@@ -41,6 +41,7 @@ async function inspectPiResources(
     "company_capability_catalog",
     "company_plan_workflow",
     "company_check_domain_permissions",
+    "company_library_search",
   ];
   const child = spawn(
     process.execPath,
@@ -175,7 +176,8 @@ test("公司级插件目录可加载，销售仅是业务域", () => {
   const bundle = loadPluginBundle(root);
   const platform = [...bundle.plugins.values()].filter((plugin) => plugin.kind === "platform-capability");
   const domains = [...bundle.plugins.values()].filter((plugin) => plugin.kind === "business-domain");
-  assert.equal(platform.length, 7);
+  assert.equal(platform.length, 8);
+  assert.equal(bundle.plugins.get("platform.library")?.configuration?.mode, "built-in");
   assert.deepEqual(domains.map((domain) => domain.id), ["domain.sales"]);
   assert.ok(platform.every((plugin) => !plugin.id.includes("sales")));
   assert.equal(bundle.workflows.size, 1);
@@ -387,6 +389,7 @@ test("Pi 清单与隔离 RPC 按 Profile 加载资源且只启用受控工具", 
     const governedTools = [
       "company_capability_catalog",
       "company_check_domain_permissions",
+      "company_library_search",
       "company_plan_workflow",
     ];
     assert.deepEqual([...company.activeTools].sort(), governedTools);

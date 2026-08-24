@@ -1,0 +1,32 @@
+{
+  "api_version": "company.platform/v1",
+  "id": "platform.library",
+  "version": "1.0.0",
+  "kind": "platform-capability",
+  "display_name": "公司资料库",
+  "description": "面向 BP、专利和开发文档的本地资料归档、版本管理与证据检索。",
+  "permissions": ["library.read", "library.manage"],
+  "write_permissions": ["library.manage"],
+  "tools": [
+    {"name": "library.search", "effect": "read", "permissions": ["library.read"]},
+    {"name": "library.read", "effect": "read", "permissions": ["library.read"]},
+    {"name": "library.import", "effect": "write", "permissions": ["library.manage"]},
+    {"name": "library.version.select", "effect": "write", "permissions": ["library.manage"]},
+    {"name": "library.archive", "effect": "write", "permissions": ["library.manage"]}
+  ],
+  "dependencies": [
+    {"id": "platform.files", "version": ">=1.0.0"},
+    {"id": "platform.knowledge", "version": ">=1.0.0"}
+  ],
+  "capabilities": [
+    "library.local-import",
+    "library.immutable-version",
+    "library.evidence-search",
+    "library.archive"
+  ],
+  "skills": [],
+  "workflows": [],
+  "configuration": {"mode": "built-in", "requires_user_configuration": false},
+  "navigation": {"route": "knowledge", "label": "公司资料库"},
+  "data_scope": {"company": "required", "storage": "local-runtime-only"}
+}

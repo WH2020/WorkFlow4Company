@@ -21,7 +21,8 @@ ROOT = Path(__file__).resolve().parents[1]
 class PluginRegistryTests(unittest.TestCase):
     def test_loads_company_capabilities_and_sales_as_domain(self) -> None:
         registry = load_registry(ROOT)
-        self.assertEqual(7, len(registry.platform_capabilities))
+        self.assertEqual(8, len(registry.platform_capabilities))
+        self.assertEqual("built-in", registry.plugins["platform.library"].configuration["mode"])
         self.assertEqual(["domain.sales"], [domain.id for domain in registry.business_domains])
         self.assertEqual(["domain.sales.pipeline-review"], sorted(registry.workflows))
         self.assertTrue(all("sales" not in item.id for item in registry.platform_capabilities))
@@ -71,7 +72,7 @@ class PluginRegistryTests(unittest.TestCase):
             root = Path(temporary)
             shutil.copytree(ROOT / "plugins/platform", root / "plugins/platform")
             registry = load_registry(root)
-            self.assertEqual(7, len(registry.platform_capabilities))
+            self.assertEqual(8, len(registry.platform_capabilities))
             self.assertEqual([], registry.business_domains)
             self.assertEqual({}, registry.workflows)
 

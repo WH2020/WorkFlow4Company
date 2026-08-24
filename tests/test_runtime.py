@@ -128,6 +128,28 @@ class RuntimeStoreTests(unittest.TestCase):
             task["approvals"][0]["storage_binding"],
         )
 
+    def test_platform_library_event_uses_unified_audit_log(self) -> None:
+        digest = "a" * 64
+        self.store.record_platform_audit(
+            "library.item.imported",
+            "accepted",
+            {"item_id": "item-demo", "category": "bp"},
+            payload_sha256=digest,
+        )
+        event = self.store.list_audit_events(1)[0]
+        self.assertEqual("library.item.imported", event["action"])
+        self.assertEqual("platform.library", event["node_id"])
+        self.assertIsNone(event["task_id"])
+        self.assertEqual(digest, event["payload_sha256"])
+        self.assertEqual("item-demo", event["details"]["item_id"])
+
+        with self.assertRaisesRegex(ValueError, "审计动作无效"):
+            self.store.record_platform_audit(
+                "sales.write",
+                "accepted",
+                {"item_id": "item-demo"},
+            )
+
     def test_restart_recovers_task_committed_before_initial_advance(self) -> None:
         database = Path(self.temporary.name) / "recover-create.db"
         interrupted = RuntimeStore(database, load_registry(ROOT))

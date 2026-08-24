@@ -11,8 +11,9 @@
   "scripts": {
     "check:types": "tsc --noEmit",
     "test:runtime": "node --test tests/plugin-runtime.test.ts",
+    "test:ui": "node --check ui/app.js",
     "test:python": "python -m unittest discover -s tests -p \"test_*.py\" -v",
-    "test": "pnpm check:types && pnpm test:runtime && pnpm test:python",
+    "test": "pnpm check:types && pnpm test:runtime && pnpm test:ui && pnpm test:python",
     "validate": "python -m company_platform validate",
     "dev:workbench": "python -m company_platform serve --port 8766 --open-browser",
     "desktop:dev": "tauri dev",

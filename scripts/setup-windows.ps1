@@ -16,6 +16,9 @@ if (-not (Test-Path -LiteralPath $VenvPython -PathType Leaf)) {
     if ($LASTEXITCODE -ne 0) { throw "创建本地 Python 环境失败。" }
 }
 
+& $VenvPython -m pip install --disable-pip-version-check --requirement (Join-Path $ProjectRoot "requirements.txt")
+if ($LASTEXITCODE -ne 0) { throw "安装 Python 资料处理依赖失败。" }
+
 $Node = Get-Command node -ErrorAction SilentlyContinue
 if (-not $Node) { throw "需要 Node.js 24.19.0 或更高的 24.x 版本；请安装后重试。" }
 $NodeVersionText = ((& $Node.Source -p "process.versions.node").Trim())

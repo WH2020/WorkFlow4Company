@@ -1,1 +1,2 @@
-# 第一阶段工作台仅使用 Python 3.11+ 标准库。
+# PDF text extraction; Office Open XML and text formats use the standard library.
+pypdf==6.14.2

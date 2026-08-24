@@ -913,6 +913,67 @@ class RuntimeStore:
             result.append(item)
         return result
 
+    def record_platform_audit(
+        self,
+        action: str,
+        result: str,
+        details: dict[str, Any],
+        *,
+        payload_sha256: str | None = None,
+        project_id: str | None = None,
+        identity: RuntimeIdentity | None = None,
+        connection: sqlite3.Connection | None = None,
+    ) -> None:
+        """Append a non-task platform capability event to the unified audit log."""
+        normalized_action = action.strip()
+        if (
+            not 1 <= len(normalized_action) <= 160
+            or not normalized_action.startswith("library.")
+            or any(character not in "abcdefghijklmnopqrstuvwxyz0123456789._-" for character in normalized_action)
+        ):
+            raise ValueError("资料库审计动作无效")
+        if result not in {"accepted", "rejected", "failed"}:
+            raise ValueError("资料库审计结果无效")
+        if not isinstance(details, dict) or len(canonical_json(details).encode("utf-8")) > 32 * 1024:
+            raise ValueError("资料库审计详情无效或过大")
+        if payload_sha256 is not None and (
+            len(payload_sha256) != 64
+            or any(character not in "0123456789abcdef" for character in payload_sha256)
+        ):
+            raise ValueError("资料库审计哈希无效")
+        if project_id is not None and (not project_id or len(project_id) > 128):
+            raise ValueError("项目编号无效")
+        if connection is not None:
+            databases = {
+                Path(row[2]).resolve()
+                for row in connection.execute("PRAGMA database_list").fetchall()
+                if row[1] == "main" and row[2]
+            }
+            if self.database_path.resolve() not in databases:
+                raise ValueError("资料库与统一审计必须使用同一个数据库")
+            self._audit(
+                connection,
+                action=normalized_action,
+                result=result,
+                identity=identity or RuntimeIdentity(),
+                project_id=project_id,
+                node_id="platform.library",
+                payload_sha256=payload_sha256,
+                details=details,
+            )
+            return
+        with self._connection() as owned_connection:
+            self._audit(
+                owned_connection,
+                action=normalized_action,
+                result=result,
+                identity=identity or RuntimeIdentity(),
+                project_id=project_id,
+                node_id="platform.library",
+                payload_sha256=payload_sha256,
+                details=details,
+            )
+
     def dashboard(self) -> dict[str, int]:
         with self._connection() as connection:
             task_counts = {

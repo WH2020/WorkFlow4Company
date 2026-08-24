@@ -1,5 +1,8 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
+import { spawnSync } from "node:child_process";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import { bundleSummary, loadCompanyProfile, loadPluginBundle, planWorkflow } from "./platform-core.ts";
 
 function asToolResult(value: unknown) {
@@ -11,7 +14,15 @@ const GOVERNED_TOOLS = [
   "company_capability_catalog",
   "company_plan_workflow",
   "company_check_domain_permissions",
+  "company_library_search",
 ];
+
+function projectPython(root: string): string {
+  const candidate = process.platform === "win32"
+    ? join(root, ".venv", "Scripts", "python.exe")
+    : join(root, ".venv", "bin", "python");
+  return existsSync(candidate) ? candidate : (process.env.PYTHON || "python");
+}
 
 export default function companyWorkflowExtension(pi: ExtensionAPI): void {
   const bundle = loadPluginBundle(process.cwd());
@@ -54,6 +65,45 @@ export default function companyWorkflowExtension(pi: ExtensionAPI): void {
     parameters: Type.Object({}),
     async execute() {
       return asToolResult(bundleSummary(bundle, profile));
+    },
+  });
+
+  pi.registerTool({
+    name: "company_library_search",
+    label: "检索公司资料",
+    description: "只读检索本机公司资料库，返回带文件、版本、位置和哈希的证据片段。默认排除保密和高度保密资料。",
+    parameters: Type.Object({
+      query: Type.String({ minLength: 1, maxLength: 200 }),
+      limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 20 })),
+    }),
+    async execute(_toolCallId, params) {
+      const completed = spawnSync(
+        projectPython(process.cwd()),
+        [
+          "-m",
+          "company_platform",
+          "library-search",
+          "--query",
+          params.query,
+          "--limit",
+          String(params.limit ?? 8),
+        ],
+        {
+          cwd: process.cwd(),
+          encoding: "utf8",
+          timeout: 15_000,
+          maxBuffer: 1024 * 1024,
+          windowsHide: true,
+        },
+      );
+      if (completed.status !== 0) {
+        throw new Error((completed.stderr || "公司资料检索失败").trim());
+      }
+      try {
+        return asToolResult(JSON.parse(completed.stdout));
+      } catch {
+        throw new Error("公司资料检索返回了无法识别的结果");
+      }
     },
   });
 

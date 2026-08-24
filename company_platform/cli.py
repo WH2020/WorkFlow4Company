@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Sequence
 
 from . import __version__
+from .library import search_library_read_only
 from .plugin_registry import RegistryError, load_registry
 from .profiles import CompanyProfile, load_profile, resolve_profile_skill_directories
 from .runtime import RuntimeStore
@@ -128,6 +129,43 @@ def command_doctor() -> int:
     return 0 if all(checks.values()) else 1
 
 
+def command_library_search(
+    query: str,
+    *,
+    limit: int = 8,
+    runtime_dir: Path | str | None = None,
+) -> int:
+    """Return bounded evidence for the Pi read-only library tool.
+
+    Confidential and highly confidential material is deliberately excluded until a model
+    disclosure policy and per-use owner confirmation are implemented.
+    """
+    root = project_root()
+    runtime_root = Path(runtime_dir or root / "runtime").resolve()
+    requested_limit = max(1, min(int(limit), 20))
+    database_path = runtime_root / "company-platform.db"
+    results = search_library_read_only(
+        database_path,
+        query,
+        confidentiality="internal",
+        limit=requested_limit,
+    )
+    print(
+        json.dumps(
+            {
+                "status": "ok",
+                "query": query,
+                "results": results,
+                "disclosure_policy": (
+                    "仅返回内部资料的证据片段；保密和高度保密资料需要后续逐次披露确认。"
+                ),
+            },
+            ensure_ascii=False,
+        )
+    )
+    return 0
+
+
 def command_launch(pi_args: Sequence[str], profile_id: str = "company-manager") -> int:
     root = project_root()
     command = root / "node_modules/.bin/pi.CMD"
@@ -146,7 +184,7 @@ def command_launch(pi_args: Sequence[str], profile_id: str = "company-manager") 
         "--no-session",
         "--offline",
         "--tools",
-        "company_capability_catalog,company_plan_workflow,company_check_domain_permissions",
+        "company_capability_catalog,company_plan_workflow,company_check_domain_permissions,company_library_search",
         "--extension",
         str(root / "pi/extensions/company-workflow.ts"),
     ]
@@ -167,6 +205,12 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser("validate", help="校验插件、依赖、DAG、权限和审批边界")
     subparsers.add_parser("self-test", help="在临时数据库完成默认业务域受控流程自检")
     subparsers.add_parser("doctor", help="检查本机运行和桌面构建依赖")
+    library_search_parser = subparsers.add_parser(
+        "library-search", help="为 Pi 返回受限的本机资料证据"
+    )
+    library_search_parser.add_argument("--query", required=True)
+    library_search_parser.add_argument("--limit", type=int, default=8)
+    library_search_parser.add_argument("--runtime-dir")
     serve_parser = subparsers.add_parser("serve", help="启动本地公司工作台")
     serve_parser.add_argument("--host", default="127.0.0.1")
     serve_parser.add_argument("--port", type=int, default=8766)
@@ -195,6 +239,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             return command_self_test()
         if arguments.command == "doctor":
             return command_doctor()
+        if arguments.command == "library-search":
+            return command_library_search(
+                arguments.query,
+                limit=arguments.limit,
+                runtime_dir=arguments.runtime_dir,
+            )
         if arguments.command == "serve":
             serve(
                 project_root=project_root(),
