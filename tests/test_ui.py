@@ -13,6 +13,7 @@ class IdCollector(HTMLParser):
         super().__init__()
         self.ids: list[str] = []
         self.inline_scripts = 0
+        self.cancel_submitters = 0
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         attributes = dict(attrs)
@@ -20,6 +21,13 @@ class IdCollector(HTMLParser):
             self.ids.append(str(attributes["id"]))
         if tag == "script" and not attributes.get("src"):
             self.inline_scripts += 1
+        if (
+            tag == "button"
+            and attributes.get("type") == "submit"
+            and attributes.get("value") == "cancel"
+            and "formnovalidate" in attributes
+        ):
+            self.cancel_submitters += 1
 
 
 class CompanyWorkbenchUiTests(unittest.TestCase):
@@ -29,6 +37,7 @@ class CompanyWorkbenchUiTests(unittest.TestCase):
         parser.feed(html)
         self.assertEqual(len(parser.ids), len(set(parser.ids)))
         self.assertEqual(0, parser.inline_scripts)
+        self.assertEqual(4, parser.cancel_submitters)
         for required in {
             "libraryImportButton",
             "librarySearchInput",

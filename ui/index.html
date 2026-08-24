@@ -281,7 +281,7 @@
     <form method="dialog" id="taskForm">
       <div class="dialog-header">
         <div><span class="section-kicker">受控工作流</span><h2 id="taskDialogTitle">发起任务</h2></div>
-        <button class="dialog-close" value="cancel" type="submit" aria-label="关闭">×</button>
+        <button class="dialog-close" value="cancel" type="submit" formnovalidate aria-label="关闭">×</button>
       </div>
       <div class="dialog-body">
         <label class="field"><span>选择工作</span><select id="workflowSelect" required></select><small id="workflowDescription">选择由业务域提供的受控流程。</small></label>
@@ -290,7 +290,7 @@
         <div class="approval-hint"><span>审</span><p><strong>写入前会停下来</strong>流程会先生成建议；涉及结构化写入时，必须由你在审批中心确认。</p></div>
       </div>
       <div class="dialog-footer">
-        <button class="secondary-button" value="cancel" type="submit">取消</button>
+        <button class="secondary-button" value="cancel" type="submit" formnovalidate>取消</button>
         <button class="primary-button" id="submitTaskButton" value="default" type="submit">开始任务</button>
       </div>
     </form>
@@ -300,7 +300,7 @@
     <form method="dialog" id="libraryForm">
       <div class="dialog-header">
         <div><span class="section-kicker">本机资料</span><h2 id="libraryDialogTitle">导入资料</h2></div>
-        <button class="dialog-close" value="cancel" type="submit" aria-label="关闭">×</button>
+        <button class="dialog-close" value="cancel" type="submit" formnovalidate aria-label="关闭">×</button>
       </div>
       <div class="dialog-body">
         <label class="file-drop" id="libraryFileDrop">
@@ -318,7 +318,7 @@
         <div class="approval-hint"><span>安</span><p><strong>导入前会进行安全检查</strong>系统会核对文件类型和内容特征，并以哈希保存不可变版本。专利默认使用“高度保密”。</p></div>
       </div>
       <div class="dialog-footer">
-        <button class="secondary-button" value="cancel" type="submit">取消</button>
+        <button class="secondary-button" value="cancel" type="submit" formnovalidate>取消</button>
         <button class="primary-button" id="librarySubmitButton" value="default" type="submit">导入并建立版本</button>
       </div>
     </form>
